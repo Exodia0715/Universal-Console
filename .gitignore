@@ -2,3 +2,13 @@
 cmake-build-*/
 build/
 *.db
+
+# Qt Creator
+.qtcreator/
+*.user
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
