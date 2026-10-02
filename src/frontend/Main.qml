@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: window
@@ -60,6 +61,25 @@ ApplicationWindow {
         repeat: true
 
         onTriggered: window.updateClock()
+    }
+
+    FileDialog {
+        id: emulatorDialog
+        title: "Select PCSX2 Executable"
+        nameFilters: ["Executable (*.exe)"]
+        onAccepted: {
+            appController.setPs2EmulatorPath(selectedFile)
+            gameDialog.open()
+        }
+    }
+
+    FolderDialog {
+        id: gameDialog
+        title: "Select Game Folder"
+        onAccepted: {
+            appController.setGameFolder(selectedFolder)
+            keyboardFocus.forceActiveFocus()
+        }
     }
 
 
@@ -202,8 +222,11 @@ ApplicationWindow {
                      event.key === Qt.Key_Space) {
 
                 if (window.currentCategory === 0) {
-
-                    window.openDiscPrompt()
+                    if (appController.isGameReady()) {
+                        appController.launch()
+                    } else {
+                        window.openDiscPrompt()
+                    }
                 }
 
                 else {
@@ -223,12 +246,8 @@ ApplicationWindow {
                             "Controller configuration will be connected to the backend."
                         )
                         break
-
                     case 2:
-                        window.openPlaceholder(
-                            "Emulator Settings",
-                            "Emulator configuration will be connected to the backend."
-                        )
+                        emulatorDialog.open()
                         break
                     }
                 }

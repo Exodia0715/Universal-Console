@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets)
 qt_standard_project_setup(REQUIRES 6.10)
 
 include(FetchContent)
@@ -31,6 +31,9 @@ qt_add_executable(console
         src/settings/Settings.cpp
         src/settings/Settings.h
         src/settings/Settings.cpp
+        src/backend/backend.h
+        src/backend/backend.cpp
+        src/frontend/AppController.h
 )
 
 qt_add_qml_module(console
