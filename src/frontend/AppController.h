@@ -12,10 +12,6 @@ class AppController : public QObject {
 public:
     explicit AppController(QObject* parent = nullptr) : QObject(parent) {
         m_settings = Settings::load(configPath().toStdString());
-        if (m_settings.library_path.empty()) {
-            m_settings.library_path = "G:\\Test iso folder\\game.iso";
-            m_settings.ps2_emulator_path = "G:\\PCSX2\\pcsx2-qt.exe";
-        }
     }
 
     Q_INVOKABLE bool isGameReady() const {
@@ -25,9 +21,32 @@ public:
     }
 
     Q_INVOKABLE bool launch() {
-        QString emu  = QString::fromStdString(m_settings.ps2_emulator_path);
         QString game = QString::fromStdString(m_settings.library_path);
-        return launchGame(emu, game);
+        ConsoleType type = detectConsoleType(QFileInfo(game).fileName());
+
+        QString emu;
+        QStringList flags;
+        if (type == ConsoleType::PS1) {
+            emu = QString::fromStdString(m_settings.ps1_emulator_path);
+            flags = {"-fullscreen", "-batch"};
+        } else if (type == ConsoleType::PS2) {
+            emu = QString::fromStdString(m_settings.ps2_emulator_path);
+            flags = {"-nogui", "-fullscreen"};
+        } else {
+            return false;
+        }
+
+        if (emu.isEmpty()) {
+            return false;
+        }
+
+        return launchGame(emu, game, flags);
+    }
+
+    Q_INVOKABLE void setPs1EmulatorPath(const QString& path) {
+        QString localPath = QUrl(path).toLocalFile();
+        m_settings.ps1_emulator_path = localPath.toStdString();
+        m_settings.save(configPath().toStdString());
     }
 
     Q_INVOKABLE void setPs2EmulatorPath(const QString& path) {
@@ -53,10 +72,17 @@ private:
     }
 
     QString findIsoInFolder(const QString& folderPath) const {
-        QDirIterator it(folderPath, {"*.iso", "*.bin"}, QDir::Files);
-        if (it.hasNext()) {
-            return it.next();
+        QDirIterator cueIt(folderPath, {"*.cue"}, QDir::Files);
+        if (cueIt.hasNext()) {
+            return cueIt.next();
         }
+
+        // Otherwise fall back to a single-file image (PS2 .iso, or a standalone .bin)
+        QDirIterator imgIt(folderPath, {"*.iso", "*.bin"}, QDir::Files);
+        if (imgIt.hasNext()) {
+            return imgIt.next();
+        }
+
         return QString();
     }
 

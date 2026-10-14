@@ -64,7 +64,17 @@ ApplicationWindow {
     }
 
     FileDialog {
-        id: emulatorDialog
+        id: duckstationDialog
+        title: "Select DuckStation Executable"
+        nameFilters: ["Executable (*.exe)"]
+        onAccepted: {
+            appController.setPs1EmulatorPath(selectedFile)
+            pcsx2Dialog.open()
+        }
+    }
+
+    FileDialog {
+        id: pcsx2Dialog
         title: "Select PCSX2 Executable"
         nameFilters: ["Executable (*.exe)"]
         onAccepted: {
@@ -247,7 +257,7 @@ ApplicationWindow {
                         )
                         break
                     case 2:
-                        emulatorDialog.open()
+                        duckstationDialog.open()
                         break
                     }
                 }
