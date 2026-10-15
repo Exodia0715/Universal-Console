@@ -235,7 +235,7 @@ ApplicationWindow {
                     if (appController.isGameReady()) {
                         appController.launch()
                     } else {
-                        window.openDiscPrompt()
+                        gameDialog.open()
                     }
                 }
 

@@ -15,12 +15,12 @@ public:
     }
 
     Q_INVOKABLE bool isGameReady() const {
-        QString game = QString::fromStdString(m_settings.library_path);
-        QString emu  = QString::fromStdString(m_settings.ps2_emulator_path);
-        return !game.isEmpty() && !emu.isEmpty() && QFile::exists(game);
+        return !m_settings.game_folder_path.empty();
     }
 
     Q_INVOKABLE bool launch() {
+        rescanGameFolder();
+
         QString game = QString::fromStdString(m_settings.library_path);
         ConsoleType type = detectConsoleType(QFileInfo(game).fileName());
 
@@ -56,13 +56,11 @@ public:
     }
 
     Q_INVOKABLE void setGameFolder(const QString& folderPath) {
-        QString localPath = QUrl(folderPath).toLocalFile();
-        QString isoPath = findIsoInFolder(localPath);
-        if (!isoPath.isEmpty()) {
-            m_settings.library_path = isoPath.toStdString();
-            m_settings.save(configPath().toStdString());
-        }
+        m_settings.game_folder_path = QUrl(folderPath).toLocalFile().toStdString();
+        rescanGameFolder();
     }
+
+
 
 
 
@@ -85,6 +83,21 @@ private:
 
         return QString();
     }
+
+    void rescanGameFolder() {
+        QString folder = QString::fromStdString(m_settings.game_folder_path);
+        qDebug() << "Rescanning folder:" << folder;
+        if (folder.isEmpty()) return;
+
+        QString isoPath = findIsoInFolder(folder);
+        qDebug() << "Found:" << isoPath;
+        if (!isoPath.isEmpty()) {
+            m_settings.library_path = isoPath.toStdString();
+            m_settings.save(configPath().toStdString());
+        }
+    }
+
+    QString m_gameFolder; // remembered so launch() can rescan it
 
     Settings m_settings;
 };
