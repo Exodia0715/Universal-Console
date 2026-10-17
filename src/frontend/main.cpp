@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include "AppController.h"
+#include "ControllerManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +17,9 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     AppController controller;
     engine.rootContext()->setContextProperty("appController", &controller);
+
+    ControllerManager controllerManager;
+    engine.rootContext()->setContextProperty("controllerManager",&controllerManager);
     engine.loadFromModule("UniversalConsole", "Main");
 
     return QGuiApplication::exec();

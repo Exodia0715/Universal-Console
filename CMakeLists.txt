@@ -27,19 +27,30 @@ if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/src/frontend/importedcontent/CMakeLists.tx
 endif()
 
 qt_add_executable(console
-        src/frontend/main.cpp
-        src/settings/Settings.cpp
-        src/settings/Settings.h
-        src/settings/Settings.cpp
-        src/backend/backend.h
-        src/backend/backend.cpp
-        src/frontend/AppController.h
+    src/frontend/main.cpp
+
+    src/frontend/AppController.h
+
+    src/frontend/ControllerManager.h
+    src/frontend/ControllerManager.cpp
+
+    src/settings/Settings.cpp
+    src/settings/Settings.h
+
+    src/backend/backend.h
+    src/backend/backend.cpp
 )
 
+target_compile_definitions(console PRIVATE SDL_MAIN_HANDLED)
+
 qt_add_qml_module(console
-        URI UniversalConsole
-        QML_FILES
+    URI UniversalConsole
+
+    QML_FILES
         src/frontend/Main.qml
+
+    RESOURCES
+        src/frontend/fonts/NotoSans-Regular.ttf
 )
 
 target_link_libraries(console PRIVATE

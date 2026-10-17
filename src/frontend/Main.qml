@@ -16,6 +16,12 @@ ApplicationWindow {
 
     color: "#06152c"
 
+    FontLoader {
+        id: xmbFont
+
+        source: "qrc:/qt/qml/UniversalConsole/src/frontend/fonts/NotoSans-Regular.ttf"
+    }
+
     // 0 = Disc
     // 1 = Settings
     property int currentCategory: 0
@@ -26,6 +32,9 @@ ApplicationWindow {
     // 1 = Controller
     // 2 = Emulator
     property int settingsIndex: 0
+
+    property bool emulatorSettingsOpen: false
+    property int emulatorSettingsIndex: 0
 
     property bool popupOpen: false
     property string popupTitle: ""
@@ -50,6 +59,117 @@ ApplicationWindow {
         popupOpen = true
     }
 
+    function moveLeft() {
+        if (window.popupOpen ||
+            window.emulatorSettingsOpen)
+            return
+
+        if (window.currentCategory > 0)
+            window.currentCategory--
+    }
+
+    function moveRight() {
+        if (window.popupOpen ||
+            window.emulatorSettingsOpen)
+            return
+
+        if (window.currentCategory < 1)
+            window.currentCategory++
+    }
+
+    function moveUp() {
+        if (window.popupOpen)
+            return
+
+        if (window.emulatorSettingsOpen) {
+            if (window.emulatorSettingsIndex > 0)
+                window.emulatorSettingsIndex--
+
+            return
+        }
+
+        if (window.currentCategory === 1 &&
+            window.settingsIndex > 0) {
+
+            window.settingsIndex--
+        }
+    }
+
+    function moveDown() {
+        if (window.popupOpen)
+            return
+
+        if (window.emulatorSettingsOpen) {
+            if (window.emulatorSettingsIndex < 1)
+                window.emulatorSettingsIndex++
+
+            return
+        }
+
+        if (window.currentCategory === 1 &&
+            window.settingsIndex < 2) {
+
+            window.settingsIndex++
+        }
+    }
+
+    function selectAction() {
+
+        if (window.emulatorSettingsOpen) {
+            if (window.emulatorSettingsIndex === 0)
+                duckstationDialog.open()
+            else
+                pcsx2Dialog.open()
+
+            return
+        }
+
+        if (window.popupOpen)
+            return
+
+        if (window.currentCategory === 0) {
+            gameDialog.open()
+            return
+        }
+
+        switch (window.settingsIndex) {
+
+        case 0:
+            window.openPlaceholder(
+                "Game Library History",
+                "Game history functionality will be connected to the backend."
+            )
+            break
+
+        case 1:
+            window.openPlaceholder(
+                "Controller Input",
+                "Controller configuration will be connected to the backend."
+            )
+            break
+
+        case 2:
+            window.emulatorSettingsOpen = true
+            window.emulatorSettingsIndex = 0
+            break
+        }
+    }
+
+    function cancelAction() {
+
+        if (window.emulatorSettingsOpen) {
+            window.emulatorSettingsOpen = false
+            keyboardFocus.forceActiveFocus()
+            return
+        }
+
+        if (window.popupOpen) {
+            window.popupOpen = false
+            keyboardFocus.forceActiveFocus()
+            return
+        }
+    }
+
     Component.onCompleted: {
         updateClock()
         keyboardFocus.forceActiveFocus()
@@ -63,31 +183,84 @@ ApplicationWindow {
         onTriggered: window.updateClock()
     }
 
+    Connections {
+        target: controllerManager
+
+        function onMoveLeft() {
+            window.moveLeft()
+        }
+
+        function onMoveRight() {
+            window.moveRight()
+        }
+
+        function onMoveUp() {
+            window.moveUp()
+        }
+
+        function onMoveDown() {
+            window.moveDown()
+        }
+
+        function onSelectPressed() {
+            window.selectAction()
+        }
+
+        function onCancelPressed() {
+            window.cancelAction()
+        }
+
+        function onControllerConnected(name) {
+            console.log("Controller connected:", name)
+        }
+
+        function onControllerDisconnected() {
+            console.log("Controller disconnected")
+        }
+    }
+
     FileDialog {
         id: duckstationDialog
+
         title: "Select DuckStation Executable"
-        nameFilters: ["Executable (*.exe)"]
+
+        nameFilters: [
+            "Executable (*.exe)"
+        ]
+
         onAccepted: {
             appController.setPs1EmulatorPath(selectedFile)
-            pcsx2Dialog.open()
+            keyboardFocus.forceActiveFocus()
         }
     }
 
     FileDialog {
         id: pcsx2Dialog
+
         title: "Select PCSX2 Executable"
-        nameFilters: ["Executable (*.exe)"]
+
+        nameFilters: [
+            "Executable (*.exe)"
+        ]
+
         onAccepted: {
             appController.setPs2EmulatorPath(selectedFile)
-            gameDialog.open()
+            keyboardFocus.forceActiveFocus()
         }
     }
 
     FolderDialog {
         id: gameDialog
+
         title: "Select Game Folder"
+
         onAccepted: {
             appController.setGameFolder(selectedFolder)
+
+            if (!appController.launch()) {
+                console.log("Unable to launch selected game")
+            }
+
             keyboardFocus.forceActiveFocus()
         }
     }
@@ -166,105 +339,48 @@ ApplicationWindow {
     // Keyboard Navigation
 
     Item {
-        id: keyboardFocus
+            id: keyboardFocus
 
-        anchors.fill: parent
-        focus: true
+            anchors.fill: parent
+            focus: true
 
-        Keys.onPressed: function(event) {
+            Keys.onPressed: function(event) {
 
-            // Popup is open
-            if (window.popupOpen) {
-
-                if (event.key === Qt.Key_Escape ||
-                    event.key === Qt.Key_Backspace) {
-
-                    window.popupOpen = false
+                if (event.key === Qt.Key_Left) {
+                    window.moveLeft()
                     event.accepted = true
                 }
 
-                return
-            }
-
-            // Horizontal navigation
-            if (event.key === Qt.Key_Left) {
-
-                if (window.currentCategory > 0)
-                    window.currentCategory--
-
-                event.accepted = true
-            }
-
-            else if (event.key === Qt.Key_Right) {
-
-                if (window.currentCategory < 1)
-                    window.currentCategory++
-
-                event.accepted = true
-            }
-
-            // Vertical Settings navigation
-            else if (event.key === Qt.Key_Up) {
-
-                if (window.currentCategory === 1 &&
-                    window.settingsIndex > 0) {
-
-                    window.settingsIndex--
+                else if (event.key === Qt.Key_Right) {
+                    window.moveRight()
+                    event.accepted = true
                 }
 
-                event.accepted = true
-            }
-
-            else if (event.key === Qt.Key_Down) {
-
-                if (window.currentCategory === 1 &&
-                    window.settingsIndex < 2) {
-
-                    window.settingsIndex++
+                else if (event.key === Qt.Key_Up) {
+                    window.moveUp()
+                    event.accepted = true
                 }
 
-                event.accepted = true
-            }
-
-            // Select
-            else if (event.key === Qt.Key_Return ||
-                     event.key === Qt.Key_Enter ||
-                     event.key === Qt.Key_Space) {
-
-                if (window.currentCategory === 0) {
-                    if (appController.isGameReady()) {
-                        appController.launch()
-                    } else {
-                        gameDialog.open()
-                    }
+                else if (event.key === Qt.Key_Down) {
+                    window.moveDown()
+                    event.accepted = true
                 }
 
-                else {
+                else if (event.key === Qt.Key_Return ||
+                         event.key === Qt.Key_Enter ||
+                         event.key === Qt.Key_Space) {
 
-                    switch (window.settingsIndex) {
-
-                    case 0:
-                        window.openPlaceholder(
-                            "Game Library History",
-                            "Game history functionality will be connected to the backend."
-                        )
-                        break
-
-                    case 1:
-                        window.openPlaceholder(
-                            "Controller Input",
-                            "Controller configuration will be connected to the backend."
-                        )
-                        break
-                    case 2:
-                        duckstationDialog.open()
-                        break
-                    }
+                    window.selectAction()
+                    event.accepted = true
                 }
 
-                event.accepted = true
+                else if (event.key === Qt.Key_Escape ||
+                         event.key === Qt.Key_Backspace) {
+
+                    window.cancelAction()
+                    event.accepted = true
+                }
             }
-        }
     }
 
     // Header
@@ -280,8 +396,9 @@ ApplicationWindow {
 
         color: "white"
 
+        font.family: xmbFont.name
         font.pixelSize: 18
-        font.weight: Font.Medium
+        font.weight: Font.Normal
 
         opacity: 0.9
     }
@@ -382,8 +499,9 @@ ApplicationWindow {
 
                     color: "white"
 
+                    font.family: xmbFont.name
                     font.pixelSize: 19
-                    font.bold: window.currentCategory === 0
+                    font.weight: Font.Normal
                 }
             }
 
@@ -526,8 +644,9 @@ ApplicationWindow {
 
                     color: "white"
 
+                    font.family: xmbFont.name
                     font.pixelSize: 19
-                    font.bold: window.currentCategory === 1
+                    font.weight: Font.Normal
                 }
             }
 
@@ -575,8 +694,11 @@ ApplicationWindow {
 
                 color: "white"
 
+                font.family: xmbFont.name
+
                 font.pixelSize: 22
-                font.bold: true
+
+                font.weight: Font.Normal
             }
 
             Text {
@@ -589,8 +711,9 @@ ApplicationWindow {
 
                 color: "#c3cedc"
 
-                font.pixelSize: 15
-                opacity: 0.7
+                font.family: xmbFont.name
+                font.weight: Font.Light
+                font.letterSpacing: 0.1
             }
         }
     }
@@ -640,7 +763,104 @@ ApplicationWindow {
 
             onClicked: {
                 window.settingsIndex = 2
+                window.emulatorSettingsOpen = true
+                window.emulatorSettingsIndex = 0
                 keyboardFocus.forceActiveFocus()
+            }
+        }
+    }
+
+    // Emulator Settings Screen
+
+    Rectangle {
+        id: emulatorSettingsPanel
+
+        anchors.centerIn: parent
+
+        width: 720
+        height: 360
+
+        visible: window.emulatorSettingsOpen
+
+        z: 50
+
+        radius: 18
+
+        color: "#E60B1728"
+
+        border.width: 1
+        border.color: "#52749a"
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+
+            spacing: 24
+
+            Text {
+                text: "Emulator Settings"
+
+                color: "white"
+
+                font.family: xmbFont.name
+                font.pixelSize: 28
+                font.weight: Font.Normal
+            }
+
+            Text {
+                text: "Choose the executable used for each PlayStation emulator."
+
+                color: "#aebccc"
+
+                font.family: xmbFont.name
+                font.pixelSize: 14
+                font.weight: Font.Light
+            }
+
+            EmulatorEntry {
+                title: "DuckStation"
+                subtitle: "PlayStation"
+                path: appController.ps1EmulatorPath
+
+                selected:
+                    window.emulatorSettingsIndex === 0
+
+                onClicked: {
+                    window.emulatorSettingsIndex = 0
+                    duckstationDialog.open()
+                    keyboardFocus.forceActiveFocus()
+                }
+            }
+
+            EmulatorEntry {
+                title: "PCSX2"
+                subtitle: "PlayStation 2"
+                path: appController.ps2EmulatorPath
+
+                selected:
+                    window.emulatorSettingsIndex === 1
+
+                onClicked: {
+                    window.emulatorSettingsIndex = 1
+                    pcsx2Dialog.open()
+                    keyboardFocus.forceActiveFocus()
+                }
+            }
+
+            Item {
+                height: 10
+            }
+
+            Text {
+                text: controllerManager.hasController
+                      ? "X   Select Emulator     O   Back"
+                      : "ENTER   Select Emulator     ESC   Back"
+
+                color: "#8798ac"
+
+                font.family: xmbFont.name
+                font.pixelSize: 13
+                font.weight: Font.Light
             }
         }
     }
@@ -679,7 +899,9 @@ ApplicationWindow {
 
         color: "#ced7e3"
 
+        font.family: xmbFont.name
         font.pixelSize: 14
+        font.weight: Font.Normal
 
         opacity: 0.62
     }
@@ -687,44 +909,56 @@ ApplicationWindow {
     // Controls Overlay
 
     Row {
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
 
-        anchors.rightMargin: 48
-        anchors.bottomMargin: 28
+            anchors.rightMargin: 48
+            anchors.bottomMargin: 28
 
-        spacing: 28
+            spacing: 28
 
-        Text {
-            text: "ENTER   Select"
+            Text {
+                text: controllerManager.hasController
+                      ? "X   Select"
+                      : "ENTER   Select"
 
-            color: "#d7dfe9"
+                color: "#d7dfe9"
 
-            font.pixelSize: 13
+                font.family: xmbFont.name
+                font.pixelSize: 13
+                font.weight: Font.Normal
 
-            opacity: 0.8
+                opacity: 0.8
+            }
+
+            Text {
+                text: controllerManager.hasController
+                      ? "O   Back"
+                      : "ESC   Back"
+
+                color: "#d7dfe9"
+
+                font.family: xmbFont.name
+                font.pixelSize: 13
+                font.weight: Font.Normal
+
+                opacity: 0.8
+            }
+
+            Text {
+                text: controllerManager.hasController
+                      ? "D-PAD / L STICK   Navigate"
+                      : "← ↑ ↓ →   Navigate"
+
+                color: "#d7dfe9"
+
+                font.family: xmbFont.name
+                font.pixelSize: 13
+                font.weight: Font.Normal
+
+                opacity: 0.8
+            }
         }
-
-        Text {
-            text: "ESC   Back"
-
-            color: "#d7dfe9"
-
-            font.pixelSize: 13
-
-            opacity: 0.8
-        }
-
-        Text {
-            text: "← ↑ ↓ →   Navigate"
-
-            color: "#d7dfe9"
-
-            font.pixelSize: 13
-
-            opacity: 0.8
-        }
-    }
 
     // Insert Disc Screen
 
@@ -860,6 +1094,118 @@ ApplicationWindow {
     }
 
     // Reusable Settings Entry
+
+    component EmulatorEntry: Item {
+        id: emulatorEntry
+
+        required property string title
+        required property string subtitle
+        required property string path
+
+        property bool selected: false
+
+        signal clicked()
+
+        width: 640
+        height: 72
+
+        opacity: selected ? 1.0 : 0.45
+        x: selected ? 12 : 0
+
+        Behavior on x {
+            NumberAnimation {
+                duration: 150
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 150
+            }
+        }
+
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 16
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+
+                width: 8
+                height: 8
+                radius: 4
+
+                color: "white"
+                opacity: emulatorEntry.selected ? 1 : 0
+            }
+
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 170
+                spacing: 4
+
+                Text {
+                    text: emulatorEntry.title
+
+                    color: "white"
+                    font.family: xmbFont.name
+                    font.pixelSize: emulatorEntry.selected ? 20 : 18
+                    font.weight: Font.Normal
+                }
+
+                Text {
+                    text: emulatorEntry.subtitle
+
+                    color: "#93a2b4"
+                    font.family: xmbFont.name
+                    font.pixelSize: 13
+                    font.weight: Font.Light
+                }
+            }
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+
+                width: 430
+                height: 40
+                radius: 8
+
+                color: "#14000000"
+                border.width: 1
+                border.color: emulatorEntry.selected ? "#6d8fb8" : "#3d5573"
+
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideMiddle
+
+                    text: emulatorEntry.path.length > 0
+                          ? emulatorEntry.path
+                          : "No executable selected"
+
+                    color: emulatorEntry.path.length > 0
+                           ? "#d7dfe9"
+                           : "#7f90a5"
+
+                    font.family: xmbFont.name
+                    font.pixelSize: 13
+                    font.weight: Font.Normal
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: false
+
+            onClicked: emulatorEntry.clicked()
+        }
+    }
 
     component SettingsEntry: Item {
         id: entry
