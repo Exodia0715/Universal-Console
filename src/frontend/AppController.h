@@ -235,6 +235,110 @@ public:
         rescanGameFolder();
     }
 
+    Q_INVOKABLE bool launchDisc(
+        int consoleType,
+        const QString& drivePath
+        )
+    {
+        QString emulator;
+        QString game;
+        QStringList flags;
+
+        // =====================================================
+        // PS1 -> DuckStation
+        // =====================================================
+
+        if (consoleType == 1)
+        {
+            emulator =
+                QString::fromStdString(
+                    m_settings.ps1_emulator_path
+                    );
+
+            // DuckStation expects the Windows physical CD-ROM
+            // device path, for example:
+            //
+            // \\.\E:
+            //
+            game = "\\\\.\\" + drivePath;
+
+            flags = {
+                "-fullscreen",
+                "-batch",
+                "--"
+            };
+        }
+
+        // =====================================================
+        // PS2 -> PCSX2
+        // =====================================================
+
+        else if (consoleType == 2)
+        {
+            emulator =
+                QString::fromStdString(
+                    m_settings.ps2_emulator_path
+                    );
+
+            // PCSX2 accepts the normal host drive path,
+            // e.g. E:
+            game = "\\\\.\\" + drivePath;
+
+            flags = {
+                "-nogui",
+                "-fullscreen",
+                "-disc"
+            };
+        }
+
+        else
+        {
+            qWarning()
+            << "Unsupported disc console type:"
+            << consoleType;
+
+            return false;
+        }
+
+        if (emulator.isEmpty())
+        {
+            qWarning()
+            << "Emulator path is not configured.";
+
+            return false;
+        }
+
+        if (!QFileInfo::exists(emulator))
+        {
+            qWarning()
+            << "Emulator executable does not exist:"
+            << emulator;
+
+            return false;
+        }
+
+        qDebug()
+            << "Launching physical disc";
+
+        qDebug()
+            << "Console type:"
+            << consoleType;
+
+        qDebug()
+            << "Emulator:"
+            << emulator;
+
+        qDebug()
+            << "Drive:"
+            << game;
+
+        return launchGame(
+            emulator,
+            game,
+            flags
+            );
+    }
+
 signals:
 
     void ps1EmulatorPathChanged();
