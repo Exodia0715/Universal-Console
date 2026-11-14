@@ -3,6 +3,7 @@
 #include <QQmlContext>
 #include "AppController.h"
 #include "ControllerManager.h"
+#include "../disc/DiscManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -21,6 +22,9 @@ int main(int argc, char *argv[])
     ControllerManager controllerManager;
     engine.rootContext()->setContextProperty("controllerManager",&controllerManager);
     engine.loadFromModule("UniversalConsole", "Main");
+
+    DiscManager discManager;
+    engine.rootContext()->setContextProperty("discManager", &discManager);
 
     return QGuiApplication::exec();
 }

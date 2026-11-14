@@ -34,6 +34,11 @@ qt_add_executable(console
     src/frontend/ControllerManager.h
     src/frontend/ControllerManager.cpp
 
+    src/disc/DiscManager.h
+    src/disc/DiscManager.cpp
+    src/disc/discInspector.hpp
+    src/disc/gameDatabase.hpp
+
     src/settings/Settings.cpp
     src/settings/Settings.h
 
@@ -62,3 +67,18 @@ target_link_libraries(console PRIVATE
 add_custom_command(TARGET console POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:console>)
+add_custom_command(
+    TARGET console
+    POST_BUILD
+
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:console>/resources"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+         "${CMAKE_CURRENT_SOURCE_DIR}/resources/gamedb.yaml"
+        "$<TARGET_FILE_DIR:console>/resources/gamedb.yaml"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/GameIndex.yaml"
+        "$<TARGET_FILE_DIR:console>/resources/GameIndex.yaml"
+)

@@ -16,6 +16,14 @@ ApplicationWindow {
 
     color: "#06152c"
 
+    onActiveChanged: {
+        // When the emulator closes and Universal Console
+        // becomes active again, restore the normal disc screen.
+        if (active && discLaunching) {
+            discLaunching = false
+        }
+    }
+
     FontLoader {
         id: xmbFont
 
@@ -35,6 +43,7 @@ ApplicationWindow {
 
     property bool emulatorSettingsOpen: false
     property int emulatorSettingsIndex: 0
+    property bool discLaunching: false
 
     property bool popupOpen: false
     property string popupTitle: ""
@@ -115,6 +124,27 @@ ApplicationWindow {
 
     function selectAction() {
 
+        if (window.currentCategory === 0) {
+
+            if (window.discLaunching)
+                return
+
+            if (!discManager.discReady)
+                return
+
+            window.discLaunching = true
+
+            var launched = appController.launchDisc(
+                discManager.consoleType,
+                discManager.drivePath
+            )
+
+            if (!launched)
+                window.discLaunching = false
+
+            return
+        }
+
         if (window.emulatorSettingsOpen) {
             if (window.emulatorSettingsIndex === 0)
                 duckstationDialog.open()
@@ -128,7 +158,25 @@ ApplicationWindow {
             return
 
         if (window.currentCategory === 0) {
-            gameDialog.open()
+
+            if (!discManager.discReady) {
+                console.log("No PlayStation disc detected")
+                return
+            }
+
+            // Immediately show feedback.
+            window.discLaunching = true
+
+            var launched = appController.launchDisc(
+                discManager.consoleType,
+                discManager.drivePath
+            )
+
+            if (!launched) {
+                console.log("Unable to launch disc")
+                window.discLaunching = false
+            }
+
             return
         }
 
@@ -682,38 +730,71 @@ ApplicationWindow {
         Column {
             anchors.horizontalCenter: parent.horizontalCenter
 
-            width: 600
-            spacing: 14
+            width: 700
+            spacing: 10
 
             Text {
                 width: parent.width
 
-                text: "Insert Game Disc"
+                text: {
+                    if (window.discLaunching)
+                        return "Reading Disc..."
+
+                    if (discManager.discReady)
+                        return discManager.gameTitle
+
+                    return "Insert Game Disc"
+                }
 
                 horizontalAlignment: Text.AlignHCenter
 
                 color: "white"
 
                 font.family: xmbFont.name
-
                 font.pixelSize: 22
-
                 font.weight: Font.Normal
             }
 
             Text {
                 width: parent.width
 
-                text: "Insert a PlayStation or PlayStation 2 game disc to begin."
+                text: {
+                    if (window.discLaunching)
+                        return "Preparing " + discManager.consoleName + " game..."
+
+                    if (discManager.discReady)
+                        return discManager.consoleName
+
+                    return "Insert a PlayStation or PlayStation 2 game disc to begin."
+                }
 
                 horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
 
                 color: "#c3cedc"
 
                 font.family: xmbFont.name
-                font.weight: Font.Light
-                font.letterSpacing: 0.1
+                font.pixelSize: 15
+                font.weight: Font.Normal
+
+                opacity: 0.75
+            }
+
+            Text {
+                width: parent.width
+
+                visible:
+                    discManager.discReady &&
+                    !window.discLaunching
+
+                horizontalAlignment: Text.AlignHCenter
+
+                color: "#93a2b4"
+
+                font.family: xmbFont.name
+                font.pixelSize: 12
+                font.weight: Font.Normal
+
+                opacity: 0.7
             }
         }
     }
@@ -805,6 +886,53 @@ ApplicationWindow {
                 font.family: xmbFont.name
                 font.pixelSize: 28
                 font.weight: Font.Normal
+            }
+
+            Item {
+                width: parent.width
+                height: window.discLaunching ? 54 : 0
+
+                visible: window.discLaunching
+
+                Rectangle {
+                    id: loadingDisc
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    width: 42
+                    height: 42
+
+                    radius: 21
+
+                    color: "transparent"
+
+                    border.width: 2
+                    border.color: "white"
+
+                    Rectangle {
+                        anchors.centerIn: parent
+
+                        width: 10
+                        height: 10
+
+                        radius: 5
+
+                        color: "transparent"
+
+                        border.width: 2
+                        border.color: "white"
+                    }
+
+                    RotationAnimation on rotation {
+                        from: 0
+                        to: 360
+
+                        duration: 1800
+                        loops: Animation.Infinite
+
+                        running: window.discLaunching
+                    }
+                }
             }
 
             Text {
