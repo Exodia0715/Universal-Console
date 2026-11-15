@@ -16,15 +16,17 @@ int main(int argc, char *argv[])
         &app,
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
+
     AppController controller;
     engine.rootContext()->setContextProperty("appController", &controller);
 
     ControllerManager controllerManager;
-    engine.rootContext()->setContextProperty("controllerManager",&controllerManager);
-    engine.loadFromModule("UniversalConsole", "Main");
+    engine.rootContext()->setContextProperty("controllerManager", &controllerManager);
 
     DiscManager discManager;
     engine.rootContext()->setContextProperty("discManager", &discManager);
+
+    engine.loadFromModule("UniversalConsole", "Main");
 
     return QGuiApplication::exec();
 }

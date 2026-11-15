@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QTimer>
 #include <QString>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 
 #include "discInspector.hpp"
 #include "gameDatabase.hpp"
@@ -47,6 +49,12 @@ class DiscManager : public QObject
                 NOTIFY discChanged
         )
 
+    Q_PROPERTY(
+        QString coverUrl
+            READ coverUrl
+                NOTIFY discChanged
+        )
+
 public:
     explicit DiscManager(QObject* parent = nullptr);
 
@@ -80,16 +88,24 @@ public:
         return m_consoleType;
     }
 
+    QString coverUrl() const
+    {
+        return m_coverUrl;
+    }
+
 signals:
     void discChanged();
 
 private slots:
     void scanForDisc();
+    void onCoverDownloaded(QNetworkReply* reply);
 
 private:
     void clearDisc();
+    void updateCoverArt();
 
     QTimer m_pollTimer;
+    QNetworkAccessManager m_netManager;
 
     GameDatabase m_gameDb;
 
@@ -99,6 +115,7 @@ private:
     QString m_consoleName;
     QString m_serial;
     QString m_drivePath;
+    QString m_coverUrl;
 
     // 0 = none
     // 1 = PS1

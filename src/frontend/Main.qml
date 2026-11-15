@@ -35,7 +35,6 @@ ApplicationWindow {
     property int currentCategory: 0
 
     // Settings submenu
-
     // 0 = History
     // 1 = Controller
     // 2 = Emulator
@@ -124,27 +123,6 @@ ApplicationWindow {
 
     function selectAction() {
 
-        if (window.currentCategory === 0) {
-
-            if (window.discLaunching)
-                return
-
-            if (!discManager.discReady)
-                return
-
-            window.discLaunching = true
-
-            var launched = appController.launchDisc(
-                discManager.consoleType,
-                discManager.drivePath
-            )
-
-            if (!launched)
-                window.discLaunching = false
-
-            return
-        }
-
         if (window.emulatorSettingsOpen) {
             if (window.emulatorSettingsIndex === 0)
                 duckstationDialog.open()
@@ -159,12 +137,14 @@ ApplicationWindow {
 
         if (window.currentCategory === 0) {
 
+            if (window.discLaunching)
+                return
+
             if (!discManager.discReady) {
                 console.log("No PlayStation disc detected")
                 return
             }
 
-            // Immediately show feedback.
             window.discLaunching = true
 
             var launched = appController.launchDisc(
@@ -387,48 +367,48 @@ ApplicationWindow {
     // Keyboard Navigation
 
     Item {
-            id: keyboardFocus
+        id: keyboardFocus
 
-            anchors.fill: parent
-            focus: true
+        anchors.fill: parent
+        focus: true
 
-            Keys.onPressed: function(event) {
+        Keys.onPressed: function(event) {
 
-                if (event.key === Qt.Key_Left) {
-                    window.moveLeft()
-                    event.accepted = true
-                }
-
-                else if (event.key === Qt.Key_Right) {
-                    window.moveRight()
-                    event.accepted = true
-                }
-
-                else if (event.key === Qt.Key_Up) {
-                    window.moveUp()
-                    event.accepted = true
-                }
-
-                else if (event.key === Qt.Key_Down) {
-                    window.moveDown()
-                    event.accepted = true
-                }
-
-                else if (event.key === Qt.Key_Return ||
-                         event.key === Qt.Key_Enter ||
-                         event.key === Qt.Key_Space) {
-
-                    window.selectAction()
-                    event.accepted = true
-                }
-
-                else if (event.key === Qt.Key_Escape ||
-                         event.key === Qt.Key_Backspace) {
-
-                    window.cancelAction()
-                    event.accepted = true
-                }
+            if (event.key === Qt.Key_Left) {
+                window.moveLeft()
+                event.accepted = true
             }
+
+            else if (event.key === Qt.Key_Right) {
+                window.moveRight()
+                event.accepted = true
+            }
+
+            else if (event.key === Qt.Key_Up) {
+                window.moveUp()
+                event.accepted = true
+            }
+
+            else if (event.key === Qt.Key_Down) {
+                window.moveDown()
+                event.accepted = true
+            }
+
+            else if (event.key === Qt.Key_Return ||
+                     event.key === Qt.Key_Enter ||
+                     event.key === Qt.Key_Space) {
+
+                window.selectAction()
+                event.accepted = true
+            }
+
+            else if (event.key === Qt.Key_Escape ||
+                     event.key === Qt.Key_Backspace) {
+
+                window.cancelAction()
+                event.accepted = true
+            }
+        }
     }
 
     // Header
@@ -709,21 +689,20 @@ ApplicationWindow {
         }
     }
 
-    // =========================================================
+// =========================================================
     // DISC MENU
     // =========================================================
 
     Item {
         id: discMenu
 
-        // Force this item to use the entire application window
         parent: window.contentItem
 
         anchors.left: parent.left
         anchors.right: parent.right
 
-        y: 305
-        height: 150
+        y: 280
+        height: 380
 
         visible: window.currentCategory === 0
 
@@ -731,7 +710,7 @@ ApplicationWindow {
             anchors.horizontalCenter: parent.horizontalCenter
 
             width: 700
-            spacing: 10
+            spacing: 8
 
             Text {
                 width: parent.width
@@ -747,9 +726,7 @@ ApplicationWindow {
                 }
 
                 horizontalAlignment: Text.AlignHCenter
-
                 color: "white"
-
                 font.family: xmbFont.name
                 font.pixelSize: 22
                 font.weight: Font.Normal
@@ -763,38 +740,174 @@ ApplicationWindow {
                         return "Preparing " + discManager.consoleName + " game..."
 
                     if (discManager.discReady)
-                        return discManager.consoleName
+                        return discManager.consoleName + "  •  Ready to Run"
 
                     return "Insert a PlayStation or PlayStation 2 game disc to begin."
                 }
 
                 horizontalAlignment: Text.AlignHCenter
-
                 color: "#c3cedc"
-
                 font.family: xmbFont.name
                 font.pixelSize: 15
                 font.weight: Font.Normal
-
-                opacity: 0.75
+                opacity: 0.8
             }
 
-            Text {
-                width: parent.width
+            Item {
+                width: 1
+                height: 8
+            }
 
-                visible:
-                    discManager.discReady &&
-                    !window.discLaunching
+            // 3D Floating Box Art Container
+            Item {
+                id: coverArtContainer
 
-                horizontalAlignment: Text.AlignHCenter
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 240
+                height: 260
 
-                color: "#93a2b4"
+                visible: discManager.discReady
 
-                font.family: xmbFont.name
-                font.pixelSize: 12
-                font.weight: Font.Normal
+                // Reactive floor shadow underneath the floating 3D case
+                Rectangle {
+                    id: dropShadow
 
-                opacity: 0.7
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 4
+
+                    width: 140
+                    height: 18
+                    radius: 9
+                    color: "#000000"
+                    opacity: 0.35
+
+                    // Shadow shrinks and fades slightly as the box floats up
+                    SequentialAnimation on scale {
+                        running: coverImage.status === Image.Ready
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.82; duration: 2200; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0;  duration: 2200; easing.type: Easing.InOutSine }
+                    }
+
+                    SequentialAnimation on opacity {
+                        running: coverImage.status === Image.Ready
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.18; duration: 2200; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 0.40; duration: 2200; easing.type: Easing.InOutSine }
+                    }
+                }
+
+                // The 3D Case Image
+                Image {
+                    id: coverImage
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: 0
+
+                    width: 210
+                    height: 235
+
+                    source: discManager.coverUrl
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    smooth: true
+                    mipmap: true
+
+                    // 3D Perspective Rotation Transform
+                    transform: Rotation {
+                        id: boxRotation
+                        origin.x: coverImage.width / 2
+                        origin.y: coverImage.height / 2
+                        axis { x: 0.15; y: 1.0; z: 0.0 }
+                        angle: 0
+                    }
+
+                    // 1. Entrance Animation when a new cover loads
+                    onStatusChanged: {
+                        if (status === Image.Ready) {
+                            entranceAnim.restart()
+                        }
+                    }
+
+                    ParallelAnimation {
+                        id: entranceAnim
+                        NumberAnimation {
+                            target: coverImage
+                            property: "scale"
+                            from: 0.6
+                            to: 1.0
+                            duration: 550
+                            easing.type: Easing.OutBack
+                        }
+                        NumberAnimation {
+                            target: coverImage
+                            property: "opacity"
+                            from: 0.0
+                            to: 1.0
+                            duration: 350
+                        }
+                        NumberAnimation {
+                            target: boxRotation
+                            property: "angle"
+                            from: -65
+                            to: 0
+                            duration: 600
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    // 2. Continuous Levitation (Bobbing up and down)
+                    SequentialAnimation on y {
+                        running: coverImage.status === Image.Ready
+                        loops: Animation.Infinite
+                        NumberAnimation { to: -12; duration: 2200; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 0;   duration: 2200; easing.type: Easing.InOutSine }
+                    }
+
+                    // 3. Continuous 3D Perspective Rocking (Y/X axis tilt)
+                    SequentialAnimation {
+                        running: coverImage.status === Image.Ready && !entranceAnim.running
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            target: boxRotation
+                            property: "angle"
+                            to: 12
+                            duration: 2800
+                            easing.type: Easing.InOutSine
+                        }
+                        NumberAnimation {
+                            target: boxRotation
+                            property: "angle"
+                            to: -12
+                            duration: 2800
+                            easing.type: Easing.InOutSine
+                        }
+                    }
+                }
+
+                // Fallback text while loading or if cover is missing
+                Text {
+                    anchors.centerIn: parent
+                    visible: coverImage.status !== Image.Ready
+
+                    text: coverImage.status === Image.Loading
+                          ? "Loading 3D Box..."
+                          : discManager.serial
+
+                    color: "#93a2b4"
+                    font.family: xmbFont.name
+                    font.pixelSize: 14
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        window.selectAction()
+                        keyboardFocus.forceActiveFocus()
+                    }
+                }
             }
         }
     }
@@ -1008,7 +1121,9 @@ ApplicationWindow {
 
         text: {
             if (window.currentCategory === 0)
-                return "Ready for a PlayStation game disc."
+                return discManager.discReady
+                       ? "Press Select to launch " + discManager.gameTitle + "."
+                       : "Ready for a PlayStation game disc."
 
             switch (window.settingsIndex) {
 
@@ -1037,56 +1152,56 @@ ApplicationWindow {
     // Controls Overlay
 
     Row {
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
 
-            anchors.rightMargin: 48
-            anchors.bottomMargin: 28
+        anchors.rightMargin: 48
+        anchors.bottomMargin: 28
 
-            spacing: 28
+        spacing: 28
 
-            Text {
-                text: controllerManager.hasController
-                      ? "X   Select"
-                      : "ENTER   Select"
+        Text {
+            text: controllerManager.hasController
+                  ? "X   Select"
+                  : "ENTER   Select"
 
-                color: "#d7dfe9"
+            color: "#d7dfe9"
 
-                font.family: xmbFont.name
-                font.pixelSize: 13
-                font.weight: Font.Normal
+            font.family: xmbFont.name
+            font.pixelSize: 13
+            font.weight: Font.Normal
 
-                opacity: 0.8
-            }
-
-            Text {
-                text: controllerManager.hasController
-                      ? "O   Back"
-                      : "ESC   Back"
-
-                color: "#d7dfe9"
-
-                font.family: xmbFont.name
-                font.pixelSize: 13
-                font.weight: Font.Normal
-
-                opacity: 0.8
-            }
-
-            Text {
-                text: controllerManager.hasController
-                      ? "D-PAD / L STICK   Navigate"
-                      : "← ↑ ↓ →   Navigate"
-
-                color: "#d7dfe9"
-
-                font.family: xmbFont.name
-                font.pixelSize: 13
-                font.weight: Font.Normal
-
-                opacity: 0.8
-            }
+            opacity: 0.8
         }
+
+        Text {
+            text: controllerManager.hasController
+                  ? "O   Back"
+                  : "ESC   Back"
+
+            color: "#d7dfe9"
+
+            font.family: xmbFont.name
+            font.pixelSize: 13
+            font.weight: Font.Normal
+
+            opacity: 0.8
+        }
+
+        Text {
+            text: controllerManager.hasController
+                  ? "D-PAD / L STICK   Navigate"
+                  : "← ↑ ↓ →   Navigate"
+
+            color: "#d7dfe9"
+
+            font.family: xmbFont.name
+            font.pixelSize: 13
+            font.weight: Font.Normal
+
+            opacity: 0.8
+        }
+    }
 
     // Insert Disc Screen
 
