@@ -17,8 +17,6 @@ ApplicationWindow {
     color: "#06152c"
 
     onActiveChanged: {
-        // When the emulator or Disc Dumper closes and Universal Console
-        // becomes active again, restore state and refresh the game library.
         if (active) {
             if (discLaunching) {
                 discLaunching = false
@@ -38,10 +36,36 @@ ApplicationWindow {
     // 2 = Settings
     property int currentCategory: 0
 
-    // Library submenu
-    // 0 = "+ Launch Disc Dumper"
-    // 1..N = Installed games in ./dumps
-    property int libraryIndex: 0
+    // Library Navigation:
+    // libraryFocusRow:
+    //   0 = "+ Launch Disc Dumper" button
+    //   1 = Platform Filter Selector (All | PlayStation | PlayStation 2)
+    //   2 = 3D Cover Flow Carousel
+    property int libraryFocusRow: 1
+
+    // 0 = All Games, 1 = PlayStation (PS1), 2 = PlayStation 2 (PS2)
+    property int libraryFilter: 0
+
+    property int selectedGameIndex: 0
+
+    // Dynamically filtered list of games based on libraryFilter (0 = All, 1 = PS1, 2 = PS2)
+    property var filteredLibraryGames: {
+        var all = discManager.libraryGames
+        if (window.libraryFilter === 0)
+            return all
+
+        var result = []
+        for (var i = 0; i < all.length; ++i) {
+            if (all[i].consoleType === window.libraryFilter) {
+                result.push(all[i])
+            }
+        }
+        return result
+    }
+
+    onLibraryFilterChanged: {
+        window.selectedGameIndex = 0
+    }
 
     // Settings submenu
     // 0 = History
@@ -58,6 +82,17 @@ ApplicationWindow {
     property string popupDescription: ""
 
     property string currentTime: ""
+
+    Connections {
+        target: discManager
+        function onLibraryChanged() {
+            if (window.filteredLibraryGames.length === 0) {
+                window.selectedGameIndex = 0
+            } else if (window.selectedGameIndex >= window.filteredLibraryGames.length) {
+                window.selectedGameIndex = window.filteredLibraryGames.length - 1
+            }
+        }
+    }
 
     function updateClock() {
         currentTime = Qt.formatTime(new Date(), "h:mm AP")
@@ -81,6 +116,22 @@ ApplicationWindow {
             window.emulatorSettingsOpen)
             return
 
+        if (window.currentCategory === 1) {
+            // Row 1: Platform Filter Tabs (All | PlayStation | PlayStation 2)
+            if (window.libraryFocusRow === 1 && window.libraryFilter > 0) {
+                window.libraryFilter--
+                return
+            }
+
+            // Row 2: 3D Cover Flow Carousel
+            if (window.libraryFocusRow === 2 && window.filteredLibraryGames.length > 0) {
+                if (window.selectedGameIndex > 0) {
+                    window.selectedGameIndex--
+                    return
+                }
+            }
+        }
+
         if (window.currentCategory > 0)
             window.currentCategory--
     }
@@ -89,6 +140,22 @@ ApplicationWindow {
         if (window.popupOpen ||
             window.emulatorSettingsOpen)
             return
+
+        if (window.currentCategory === 1) {
+            // Row 1: Platform Filter Tabs (All | PlayStation | PlayStation 2)
+            if (window.libraryFocusRow === 1 && window.libraryFilter < 2) {
+                window.libraryFilter++
+                return
+            }
+
+            // Row 2: 3D Cover Flow Carousel
+            if (window.libraryFocusRow === 2 && window.filteredLibraryGames.length > 0) {
+                if (window.selectedGameIndex < window.filteredLibraryGames.length - 1) {
+                    window.selectedGameIndex++
+                    return
+                }
+            }
+        }
 
         if (window.currentCategory < 2)
             window.currentCategory++
@@ -105,9 +172,9 @@ ApplicationWindow {
             return
         }
 
-        if (window.currentCategory === 1 &&
-            window.libraryIndex > 0) {
-            window.libraryIndex--
+        if (window.currentCategory === 1) {
+            if (window.libraryFocusRow > 0)
+                window.libraryFocusRow--
             return
         }
 
@@ -130,9 +197,9 @@ ApplicationWindow {
         }
 
         if (window.currentCategory === 1) {
-            var maxLibIndex = discManager.libraryGames.length
-            if (window.libraryIndex < maxLibIndex)
-                window.libraryIndex++
+            var maxRow = window.filteredLibraryGames.length > 0 ? 2 : 1
+            if (window.libraryFocusRow < maxRow)
+                window.libraryFocusRow++
             return
         }
 
@@ -143,18 +210,17 @@ ApplicationWindow {
         }
     }
 
-function launchLibraryGame(gameIndex) {
-        if (gameIndex < 0 || gameIndex >= discManager.libraryGames.length)
+    function launchLibraryGame(gameIndex) {
+        if (gameIndex < 0 || gameIndex >= window.filteredLibraryGames.length)
             return
 
-        var game = discManager.libraryGames[gameIndex]
+        var game = window.filteredLibraryGames[gameIndex]
         var emuPath = (game.consoleType === 2)
                       ? appController.ps2EmulatorPath
                       : appController.ps1EmulatorPath
 
         window.discLaunching = true
 
-        // Launch the dumped .iso / .cue file directly on disk (ignores optical drive!)
         var launched = discManager.launchLibraryFile(
             emuPath,
             game.filePath
@@ -212,7 +278,7 @@ function launchLibraryGame(gameIndex) {
 
         // Category 1: Game Library & Dumper
         if (window.currentCategory === 1) {
-            if (window.libraryIndex === 0) {
+            if (window.libraryFocusRow === 0) {
                 var started = discManager.launchDumper()
                 if (!started) {
                     window.openPlaceholder(
@@ -220,8 +286,12 @@ function launchLibraryGame(gameIndex) {
                         "Place UniversalConsoleDumper.exe in the build/ folder to launch the disc extraction utility."
                     )
                 }
+            } else if (window.libraryFocusRow === 1) {
+                // Pressing Select on a filter tab moves down into the 3D carousel if games exist
+                if (window.filteredLibraryGames.length > 0)
+                    window.libraryFocusRow = 2
             } else {
-                window.launchLibraryGame(window.libraryIndex - 1)
+                window.launchLibraryGame(window.selectedGameIndex)
             }
             return
         }
@@ -524,7 +594,7 @@ function launchLibraryGame(gameIndex) {
 
         anchors.horizontalCenter: parent.horizontalCenter
 
-        y: 145
+        y: 120
 
         spacing: 120
 
@@ -661,21 +731,18 @@ function launchLibraryGame(gameIndex) {
                         ctx.lineJoin = "round"
                         ctx.lineCap = "round"
 
-                        // Book 1 (Left standing spine)
                         ctx.strokeRect(10, 12, 10, 36)
                         ctx.beginPath()
                         ctx.moveTo(10, 20)
                         ctx.lineTo(20, 20)
                         ctx.stroke()
 
-                        // Book 2 (Middle standing spine, slightly taller)
                         ctx.strokeRect(22, 8, 11, 40)
                         ctx.beginPath()
                         ctx.moveTo(22, 17)
                         ctx.lineTo(33, 17)
                         ctx.stroke()
 
-                        // Book 3 (Right tilted book leaning against the others)
                         ctx.save()
                         ctx.translate(36, 48)
                         ctx.rotate(-0.22)
@@ -707,10 +774,15 @@ function launchLibraryGame(gameIndex) {
                 onClicked: {
                     window.currentCategory = 1
                     discManager.refreshLibrary()
+                    if (window.filteredLibraryGames.length > 0)
+                        window.libraryFocusRow = 2
+                    else
+                        window.libraryFocusRow = 1
                     keyboardFocus.forceActiveFocus()
                 }
             }
         }
+
 
         Item {
             id: settingsCategory
@@ -796,30 +868,12 @@ function launchLibraryGame(gameIndex) {
                         ctx.closePath()
                         ctx.stroke()
 
-                        // Inner gear body
                         ctx.beginPath()
-
-                        ctx.arc(
-                            cx,
-                            cy,
-                            bodyRadius,
-                            0,
-                            Math.PI * 2
-                        )
-
+                        ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2)
                         ctx.stroke()
 
-                        // Center hole
                         ctx.beginPath()
-
-                        ctx.arc(
-                            cx,
-                            cy,
-                            6,
-                            0,
-                            Math.PI * 2
-                        )
-
+                        ctx.arc(cx, cy, 6, 0, Math.PI * 2)
                         ctx.stroke()
                     }
                 }
@@ -848,6 +902,7 @@ function launchLibraryGame(gameIndex) {
         }
     }
 
+
     Item {
         id: discMenu
 
@@ -856,7 +911,7 @@ function launchLibraryGame(gameIndex) {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        y: 280
+        y: 265
         height: 380
 
         visible: window.currentCategory === 0
@@ -923,7 +978,6 @@ function launchLibraryGame(gameIndex) {
 
                 visible: discManager.discReady
 
-                // Reactive floor shadow underneath the floating 3D case
                 Rectangle {
                     id: dropShadow
 
@@ -952,7 +1006,6 @@ function launchLibraryGame(gameIndex) {
                     }
                 }
 
-                // The 3D Case Image
                 Image {
                     id: coverImage
 
@@ -1065,262 +1118,410 @@ function launchLibraryGame(gameIndex) {
     Item {
         id: libraryMenu
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: 290
-        width: 780
-        height: 310
+        parent: window.contentItem
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: 235
+        height: 430
 
         visible: window.currentCategory === 1
 
-        Row {
-            anchors.fill: parent
-            spacing: 45
+        property var activeGame:
+            (window.filteredLibraryGames.length > 0 &&
+             window.selectedGameIndex >= 0 &&
+             window.selectedGameIndex < window.filteredLibraryGames.length)
+            ? window.filteredLibraryGames[window.selectedGameIndex]
+            : null
 
-            // Left Column: "+ Launch Disc Dumper" & Installed Games List
-            Column {
-                width: 440
-                spacing: 8
+        // Row 0: "+ Launch Disc Dumper" Pill Button
+        Rectangle {
+            id: dumperPillBtn
 
-                SettingsEntry {
-                    width: 440
-                    title: "+ Launch Disc Dumper"
-                    selected: window.libraryIndex === 0
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 0
+            width: 230
+            height: 32
+            radius: 16
 
-                    onClicked: {
-                        window.libraryIndex = 0
-                        window.selectAction()
-                        keyboardFocus.forceActiveFocus()
-                    }
-                }
+            color: window.libraryFocusRow === 0 ? "#2b6cb0" : "#14000000"
+            border.width: window.libraryFocusRow === 0 ? 2 : 1
+            border.color: window.libraryFocusRow === 0 ? "white" : "#4a6785"
+            scale: window.libraryFocusRow === 0 ? 1.06 : 0.96
+            opacity: window.libraryFocusRow === 0 ? 1.0 : 0.65
 
-                Rectangle {
-                    width: 380
-                    height: 1
-                    color: "#3d5573"
-                    opacity: 0.5
-                }
+            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: 150 } }
 
-                // Empty state message if no games are in ./dumps yet
-                Text {
-                    visible: discManager.libraryGames.length === 0
-                    text: "No extracted games found in ./dumps yet.\nClick '+ Launch Disc Dumper' above to extract a disc."
-                    color: "#93a2b4"
-                    font.family: xmbFont.name
-                    font.pixelSize: 14
-                    topPadding: 10
-                }
-
-// Scrollable list of installed games
-                ListView {
-                    id: libraryListView
-
-                    width: 440
-                    height: 230
-                    clip: true
-                    spacing: 6
-
-                    model: discManager.libraryGames
-                    currentIndex: window.libraryIndex - 1
-
-                    delegate: SettingsEntry {
-                        required property int index
-                        required property var modelData
-
-                        width: 420
-                        title: modelData.title
-                        selected: window.libraryIndex === (index + 1)
-
-                        onClicked: {
-                            if (window.libraryIndex === (index + 1)) {
-                                window.selectAction()
-                            } else {
-                                window.libraryIndex = index + 1
-                            }
-                            keyboardFocus.forceActiveFocus()
-                        }
-                    }
-                }
+            Text {
+                anchors.centerIn: parent
+                text: "+ Launch Disc Dumper"
+                color: "white"
+                font.family: xmbFont.name
+                font.pixelSize: 13
+                font.bold: window.libraryFocusRow === 0
             }
 
-// Right Column: 3D Floating Box Art & Console Preview for Selected Game
-            Column {
-                width: 260
-                spacing: 8
-                anchors.top: parent.top
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    window.libraryFocusRow = 0
+                    window.selectAction()
+                    keyboardFocus.forceActiveFocus()
+                }
+            }
+        }
 
-                visible: window.libraryIndex > 0 &&
-                         (window.libraryIndex - 1) < discManager.libraryGames.length
+        // Row 1: Console Filter Selector (All | PlayStation | PlayStation 2)
+        Row {
+            id: filterBarRow
 
-                property var activeGame:
-                    (window.libraryIndex > 0 && (window.libraryIndex - 1) < discManager.libraryGames.length)
-                    ? discManager.libraryGames[window.libraryIndex - 1]
-                    : null
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 40
+            spacing: 12
 
-                // 3D Floating Box Art Container
-                Item {
-                    id: libCoverContainer
+            Repeater {
+                model: [
+                    { label: "All Games",     filterVal: 0 },
+                    { label: "PlayStation",   filterVal: 1 },
+                    { label: "PlayStation 2", filterVal: 2 }
+                ]
 
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 240
-                    height: 255
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
 
-                    // Reactive floor shadow underneath the floating 3D case
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 4
+                    property bool isActiveFilter: window.libraryFilter === modelData.filterVal
+                    property bool isRowFocused: window.libraryFocusRow === 1
 
-                        width: 140
-                        height: 18
-                        radius: 9
-                        color: "#000000"
-                        opacity: 0.35
+                    width: 135
+                    height: 30
+                    radius: 15
 
-                        SequentialAnimation on scale {
-                            running: libCoverImage.status === Image.Ready
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.82; duration: 2200; easing.type: Easing.InOutSine }
-                            NumberAnimation { to: 1.0;  duration: 2200; easing.type: Easing.InOutSine }
-                        }
+                    color: isActiveFilter
+                           ? (isRowFocused ? "#1e5aa8" : "#163d73")
+                           : "#10000000"
 
-                        SequentialAnimation on opacity {
-                            running: libCoverImage.status === Image.Ready
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.18; duration: 2200; easing.type: Easing.InOutSine }
-                            NumberAnimation { to: 0.40; duration: 2200; easing.type: Easing.InOutSine }
-                        }
-                    }
+                    border.width: isActiveFilter ? 2 : 1
+                    border.color: isActiveFilter
+                                  ? (isRowFocused ? "white" : "#7fa9d9")
+                                  : "#3d5573"
 
-                    // The 3D Case Image
-                    Image {
-                        id: libCoverImage
+                    opacity: isActiveFilter ? 1.0 : 0.55
+                    scale: (isActiveFilter && isRowFocused) ? 1.05 : 1.0
 
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: 0
-
-                        width: 205
-                        height: 230
-
-                        source: parent.parent.activeGame ? parent.parent.activeGame.coverUrl : ""
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        smooth: true
-                        mipmap: true
-
-                        transform: Rotation {
-                            id: libBoxRotation
-                            origin.x: libCoverImage.width / 2
-                            origin.y: libCoverImage.height / 2
-                            axis { x: 0.15; y: 1.0; z: 0.0 }
-                            angle: 0
-                        }
-
-                        // Re-trigger the 3D flip-in animation whenever you scroll to a different game!
-                        onSourceChanged: {
-                            if (status === Image.Ready) {
-                                libEntranceAnim.restart()
-                            }
-                        }
-
-                        onStatusChanged: {
-                            if (status === Image.Ready) {
-                                libEntranceAnim.restart()
-                            }
-                        }
-
-                        ParallelAnimation {
-                            id: libEntranceAnim
-                            NumberAnimation {
-                                target: libCoverImage
-                                property: "scale"
-                                from: 0.6
-                                to: 1.0
-                                duration: 500
-                                easing.type: Easing.OutBack
-                            }
-                            NumberAnimation {
-                                target: libCoverImage
-                                property: "opacity"
-                                from: 0.0
-                                to: 1.0
-                                duration: 300
-                            }
-                            NumberAnimation {
-                                target: libBoxRotation
-                                property: "angle"
-                                from: -65
-                                to: 0
-                                duration: 550
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-
-                        // Continuous Levitation (Bobbing up and down)
-                        SequentialAnimation on y {
-                            running: libCoverImage.status === Image.Ready
-                            loops: Animation.Infinite
-                            NumberAnimation { to: -12; duration: 2200; easing.type: Easing.InOutSine }
-                            NumberAnimation { to: 0;   duration: 2200; easing.type: Easing.InOutSine }
-                        }
-
-                        // Continuous 3D Perspective Rocking
-                        SequentialAnimation {
-                            running: libCoverImage.status === Image.Ready && !libEntranceAnim.running
-                            loops: Animation.Infinite
-                            NumberAnimation {
-                                target: libBoxRotation
-                                property: "angle"
-                                to: 12
-                                duration: 2800
-                                easing.type: Easing.InOutSine
-                            }
-                            NumberAnimation {
-                                target: libBoxRotation
-                                property: "angle"
-                                to: -12
-                                duration: 2800
-                                easing.type: Easing.InOutSine
-                            }
-                        }
-                    }
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
 
                     Text {
                         anchors.centerIn: parent
-                        width: parent.width - 20
-                        visible: libCoverImage.status !== Image.Ready
-                        text: libCoverImage.status === Image.Loading
-                              ? "Loading 3D Box..."
-                              : (parent.parent.activeGame ? parent.parent.activeGame.title : "")
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        color: "#93a2b4"
+                        text: parent.modelData.label
+                        color: "white"
                         font.family: xmbFont.name
                         font.pixelSize: 13
+                        font.bold: parent.isActiveFilter
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            window.selectAction()
+                            window.libraryFilter = parent.modelData.filterVal
+                            if (window.filteredLibraryGames.length > 0)
+                                window.libraryFocusRow = 2
+                            else
+                                window.libraryFocusRow = 1
                             keyboardFocus.forceActiveFocus()
                         }
                     }
                 }
+            }
+        }
 
-                Text {
-                    width: parent.width
-                    text: parent.activeGame ? parent.activeGame.consoleName + "  •  Installed Dump" : ""
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "#c3cedc"
-                    font.family: xmbFont.name
-                    font.pixelSize: 14
-                    opacity: 0.85
+        // Empty State Message (if no games match the selected filter)
+        Column {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 35
+            spacing: 10
+            visible: window.filteredLibraryGames.length === 0
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: {
+                    if (window.libraryFilter === 1)
+                        return "No PlayStation (PS1) Games Found"
+                    if (window.libraryFilter === 2)
+                        return "No PlayStation 2 Games Found"
+                    return "No Extracted Games in Library"
+                }
+                color: "white"
+                font.family: xmbFont.name
+                font.pixelSize: 22
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Extract a disc with '+ Launch Disc Dumper' or switch the platform filter above."
+                color: "#93a2b4"
+                font.family: xmbFont.name
+                font.pixelSize: 14
+            }
+        }
+
+        // Selected Game Title & Index Counter (e.g., "PlayStation  •  1 of 3")
+        Column {
+            id: selectedGameHeader
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 80
+            width: 750
+            spacing: 3
+
+            visible: window.filteredLibraryGames.length > 0
+            opacity: window.libraryFocusRow === 2 ? 1.0 : 0.65
+
+            Behavior on opacity { NumberAnimation { duration: 180 } }
+
+            Text {
+                width: parent.width
+                text: libraryMenu.activeGame ? libraryMenu.activeGame.title : ""
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                color: "white"
+                font.family: xmbFont.name
+                font.pixelSize: 21
+            }
+
+            Text {
+                width: parent.width
+                text: libraryMenu.activeGame
+                      ? (libraryMenu.activeGame.consoleName + "   •   " +
+                         (window.selectedGameIndex + 1) + " of " + window.filteredLibraryGames.length)
+                      : ""
+                horizontalAlignment: Text.AlignHCenter
+                color: "#c3cedc"
+                font.family: xmbFont.name
+                font.pixelSize: 14
+                opacity: 0.85
+            }
+        }
+
+        Item {
+            id: coverFlowStage
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            y: 162
+            height: 265
+
+            visible: window.filteredLibraryGames.length > 0
+
+            Repeater {
+                model: window.filteredLibraryGames
+
+                delegate: Item {
+                    id: cardDelegate
+
+                    required property int index
+                    required property var modelData
+
+                    // Signed distance from the currently selected center game
+                    property int offset: index - window.selectedGameIndex
+                    property int absOffset: Math.abs(offset)
+                    property bool isCenter: offset === 0
+
+                    width: 200
+                    height: 230
+
+                    // Overlapping horizontal layout
+                    x: {
+                        var centerX = (coverFlowStage.width - width) / 2
+                        if (offset === 0)
+                            return centerX
+                        var dir = offset > 0 ? 1 : -1
+                        return centerX + dir * (135 + (absOffset - 1) * 92)
+                    }
+
+                    // Spaced below the subtitle text
+                    y: isCenter ? 4 : Math.min(8 + absOffset * 10, 38)
+
+                    // Center card is in front of all others
+                    z: 100 - absOffset
+
+                    // Progressive scale drop-off for depth
+                    scale: isCenter
+                           ? (window.libraryFocusRow === 2 ? 1.12 : 1.0)
+                           : Math.max(0.55, 0.90 - (absOffset - 1) * 0.13)
+
+                    // Fade out cards far in the background
+                    opacity: absOffset > 5
+                             ? 0.0
+                             : (isCenter ? 1.0 : Math.max(0.28, 0.82 - (absOffset - 1) * 0.16))
+
+                    visible: opacity > 0.01
+
+                    Behavior on x {
+                        NumberAnimation { duration: 340; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on y {
+                        NumberAnimation { duration: 340; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on scale {
+                        NumberAnimation { duration: 340; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+                    }
+
+                    // 1. Reactive Dark Floor Shadow underneath each 3D box
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 2
+
+                        width: 135
+                        height: 16
+                        radius: 8
+                        color: "#000000"
+                        opacity: cardDelegate.isCenter ? 0.42 : 0.25
+
+                        SequentialAnimation on scale {
+                            running: cardDelegate.isCenter && coverArtImg.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.82; duration: 2200; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 1.0;  duration: 2200; easing.type: Easing.InOutSine }
+                        }
+                    }
+
+                    // 2. The 3D Case Image
+                    Image {
+                        id: coverArtImg
+
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 0
+
+                        width: 195
+                        height: 215
+
+                        source: cardDelegate.modelData.coverUrl
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        smooth: true
+                        mipmap: true
+
+                        Behavior on y {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+
+                        transform: Rotation {
+                            id: cardRotation
+                            origin.x: coverArtImg.width / 2
+                            origin.y: coverArtImg.height / 2
+                            axis { x: 0.12; y: 1.0; z: 0.0 }
+
+                            property real idleRockAngle: 0
+
+                            angle: cardDelegate.isCenter
+                                   ? idleRockAngle
+                                   : (cardDelegate.offset < 0 ? 22 : -22)
+
+                            Behavior on angle {
+                                NumberAnimation { duration: 340; easing.type: Easing.OutCubic }
+                            }
+                        }
+
+                        // Continuous Levitation (Bobbing up and down) on the center selected card
+                        SequentialAnimation on y {
+                            running: cardDelegate.isCenter &&
+                                     window.libraryFocusRow === 2 &&
+                                     coverArtImg.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation { to: -10; duration: 2200; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 0;   duration: 2200; easing.type: Easing.InOutSine }
+                        }
+
+                        // Continuous 3D Perspective Rocking on the center selected card
+                        SequentialAnimation {
+                            running: cardDelegate.isCenter &&
+                                     window.libraryFocusRow === 2 &&
+                                     coverArtImg.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                target: cardRotation
+                                property: "idleRockAngle"
+                                to: 11
+                                duration: 2800
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                target: cardRotation
+                                property: "idleRockAngle"
+                                to: -11
+                                duration: 2800
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+
+                    // Fallback title card if 3D image is still loading or missing
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 155
+                        height: 200
+                        radius: 6
+                        color: "#102444"
+                        border.color: cardDelegate.isCenter ? "white" : "#4a6785"
+                        border.width: 2
+                        visible: coverArtImg.status !== Image.Ready
+
+                        Text {
+                            anchors.centerIn: parent
+                            width: parent.width - 20
+                            text: coverArtImg.status === Image.Loading
+                                  ? "Loading 3D Box..."
+                                  : cardDelegate.modelData.title
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            color: "white"
+                            font.family: xmbFont.name
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            window.libraryFocusRow = 2
+                            if (cardDelegate.isCenter) {
+                                window.selectAction()
+                            } else {
+                                window.selectedGameIndex = cardDelegate.index
+                            }
+                            keyboardFocus.forceActiveFocus()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Mouse Wheel support to scroll smoothly through the 3D Cover Flow
+        WheelHandler {
+            onWheel: function(event) {
+                if (window.filteredLibraryGames.length === 0)
+                    return
+                window.libraryFocusRow = 2
+                if (event.angleDelta.y < 0 || event.angleDelta.x < 0) {
+                    if (window.selectedGameIndex < window.filteredLibraryGames.length - 1)
+                        window.selectedGameIndex++
+                } else if (event.angleDelta.y > 0 || event.angleDelta.x > 0) {
+                    if (window.selectedGameIndex > 0)
+                        window.selectedGameIndex--
                 }
             }
         }
     }
-
 
     Column {
         id: settingsMenu
@@ -1329,7 +1530,7 @@ function launchLibraryGame(gameIndex) {
            categoryRow.x -
            25
 
-        y: 295
+        y: 280
 
         width: 330
 
@@ -1382,7 +1583,7 @@ function launchLibraryGame(gameIndex) {
 
         visible: window.emulatorSettingsOpen
 
-        z: 50
+        z: 200
 
         radius: 18
 
@@ -1518,7 +1719,7 @@ function launchLibraryGame(gameIndex) {
         anchors.horizontalCenter: parent.horizontalCenter
 
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 92
+        anchors.bottomMargin: 64
 
         width: 650
 
@@ -1532,10 +1733,12 @@ function launchLibraryGame(gameIndex) {
                        : "Ready for a PlayStation game disc."
 
             if (window.currentCategory === 1) {
-                if (window.libraryIndex === 0)
+                if (window.libraryFocusRow === 0)
                     return "Open the Disc Dumper utility to extract games to your local library."
-                if ((window.libraryIndex - 1) < discManager.libraryGames.length)
-                    return "Press Select to play " + discManager.libraryGames[window.libraryIndex - 1].title + "."
+                if (window.libraryFocusRow === 1)
+                    return "Use Left / Right to filter between All Games, PlayStation, and PlayStation 2."
+                if (window.selectedGameIndex >= 0 && window.selectedGameIndex < window.filteredLibraryGames.length)
+                    return "Press Select to play " + window.filteredLibraryGames[window.selectedGameIndex].title + "  •  Press Up to filter by console."
                 return "Browse and launch your extracted PlayStation games."
             }
 
@@ -1604,8 +1807,8 @@ function launchLibraryGame(gameIndex) {
 
         Text {
             text: controllerManager.hasController
-                  ? "D-PAD / L STICK   Navigate"
-                  : "← ↑ ↓ →   Navigate"
+                  ? "D-PAD / L STICK   Browse"
+                  : "← ↑ ↓ →   Browse"
 
             color: "#d7dfe9"
 
@@ -1628,7 +1831,7 @@ function launchLibraryGame(gameIndex) {
 
         color: "#B0000000"
 
-        z: 100
+        z: 300
 
         opacity: visible ? 1 : 0
 
@@ -1657,8 +1860,6 @@ function launchLibraryGame(gameIndex) {
                 width: parent.width - 80
 
                 spacing: 22
-
-                // Animated disc for disc prompt
 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
