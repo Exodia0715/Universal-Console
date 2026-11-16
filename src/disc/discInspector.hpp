@@ -43,12 +43,17 @@ public:
             }
 
             if (info.isPlayStation && info.serialId.empty()) {
-                size_t slashPos = line.find_last_of("\\/");
-                size_t semiPos = line.find(';', slashPos);
+                size_t startPos = line.find_last_of("\\/:");
+                size_t semiPos = line.find(';', startPos);
                 
-                if (slashPos != std::string::npos) {
-                    info.serialId = line.substr(slashPos + 1, semiPos - (slashPos + 1));
-                    info.serialId.erase(info.serialId.find_last_not_of(" \r\n\t") + 1);
+                if (startPos != std::string::npos) {
+                    info.serialId = line.substr(startPos + 1, semiPos - (startPos + 1));
+
+                    size_t first = info.serialId.find_first_not_of(" \r\n\t");
+                    size_t last  = info.serialId.find_last_not_of(" \r\n\t");
+                    if (first != std::string::npos && last != std::string::npos) {
+                        info.serialId = info.serialId.substr(first, last - first + 1);
+                    }
 
                     info.cleanSerial = info.serialId;
                     std::replace(info.cleanSerial.begin(), info.cleanSerial.end(), '_', '-');
@@ -57,9 +62,16 @@ public:
                         info.cleanSerial.end()
                     );
 
+                    std::transform(
+                        info.cleanSerial.begin(),
+                        info.cleanSerial.end(),
+                        info.cleanSerial.begin(),
+                        ::toupper
+                    );
+
                     // Decode Region from Serial Prefix (SLUS/SCUS = USA, SLES/SCES = Europe, SLPS/SCPS = Japan)
                     if (info.cleanSerial.size() >= 4) {
-                        char regChar = std::toupper(info.cleanSerial[2]);
+                        char regChar = info.cleanSerial[2];
                         if (regChar == 'U') info.region = "NTSC-U (North America)";
                         else if (regChar == 'E') info.region = "PAL (Europe / Australia)";
                         else if (regChar == 'P' || regChar == 'J') info.region = "NTSC-J (Japan)";

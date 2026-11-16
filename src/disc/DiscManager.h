@@ -3,6 +3,9 @@
 #include <QObject>
 #include <QTimer>
 #include <QString>
+#include <QVariantList>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 
 #include "discInspector.hpp"
 #include "gameDatabase.hpp"
@@ -47,49 +50,52 @@ class DiscManager : public QObject
                 NOTIFY discChanged
         )
 
+    Q_PROPERTY(
+        QString coverUrl
+            READ coverUrl
+                NOTIFY discChanged
+        )
+
+    Q_PROPERTY(
+        QVariantList libraryGames
+            READ libraryGames
+                NOTIFY libraryChanged
+        )
+
 public:
     explicit DiscManager(QObject* parent = nullptr);
 
-    bool discReady() const
-    {
-        return m_discReady;
-    }
+    bool discReady() const { return m_discReady; }
+    QString gameTitle() const { return m_gameTitle; }
+    QString consoleName() const { return m_consoleName; }
+    QString serial() const { return m_serial; }
+    QString drivePath() const { return m_drivePath; }
+    int consoleType() const { return m_consoleType; }
+    QString coverUrl() const { return m_coverUrl; }
+    QVariantList libraryGames() const { return m_libraryGames; }
 
-    QString gameTitle() const
-    {
-        return m_gameTitle;
-    }
+    Q_INVOKABLE bool launchDumper();
 
-    QString consoleName() const
-    {
-        return m_consoleName;
-    }
+    Q_INVOKABLE bool launchLibraryFile(const QString& emulatorPath, const QString& filePath);
 
-    QString serial() const
-    {
-        return m_serial;
-    }
-
-    QString drivePath() const
-    {
-        return m_drivePath;
-    }
-
-    int consoleType() const
-    {
-        return m_consoleType;
-    }
+    Q_INVOKABLE void refreshLibrary();
 
 signals:
     void discChanged();
+    void libraryChanged();
 
 private slots:
     void scanForDisc();
+    void onCoverDownloaded(QNetworkReply* reply);
 
 private:
     void clearDisc();
+    void updateCoverArt();
+    QString findDumpsDir() const;
+    QString resolve3DCoverUrl(const QString& serial, int consoleType);
 
     QTimer m_pollTimer;
+    QNetworkAccessManager m_netManager;
 
     GameDatabase m_gameDb;
 
@@ -99,9 +105,9 @@ private:
     QString m_consoleName;
     QString m_serial;
     QString m_drivePath;
-
-    // 0 = none
-    // 1 = PS1
-    // 2 = PS2
+    QString m_coverUrl;
     int m_consoleType = 0;
+
+    QVariantList m_libraryGames;
+    QStringList m_lastLibraryPaths;
 };
