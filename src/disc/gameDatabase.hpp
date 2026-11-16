@@ -23,25 +23,31 @@ public:
         return cleanSerial; // Fallback if unknown disc
     }
 
-    // Reverse lookup: finds a Serial ID from a folder/file name matching the console type (1 = PS1, 2 = PS2)
-    std::string getSerialByTitle(const std::string& folderOrTitle, int consoleType = 0) const {
-        std::string key = toLower(sanitizeForFilename(folderOrTitle));
+std::string getSerialByTitle(const std::string& folderOrTitle, int consoleType = 0) const {
+        std::string baseKey = toLower(sanitizeForFilename(folderOrTitle));
+        std::vector<std::string> keysToTry = {
+            baseKey,
+            baseKey + " (disc 1)",
+            baseKey + " (usa)",
+            baseKey + " (usa) (disc 1)"
+        };
 
-        if (consoleType == 2) {
-            auto it = m_ps2TitleToSerial.find(key);
-            if (it != m_ps2TitleToSerial.end()) return it->second;
-        } else if (consoleType == 1) {
-            auto it = m_ps1TitleToSerial.find(key);
-            if (it != m_ps1TitleToSerial.end()) return it->second;
+        for (const auto& key : keysToTry) {
+            if (consoleType == 1) {
+                auto it = m_ps1TitleToSerial.find(key);
+                if (it != m_ps1TitleToSerial.end()) return it->second;
+            } else if (consoleType == 2) {
+                auto it = m_ps2TitleToSerial.find(key);
+                if (it != m_ps2TitleToSerial.end()) return it->second;
+            }
         }
 
-        // Fallback: check both maps
-        auto it2 = m_ps2TitleToSerial.find(key);
-        if (it2 != m_ps2TitleToSerial.end()) return it2->second;
-
-        auto it1 = m_ps1TitleToSerial.find(key);
-        if (it1 != m_ps1TitleToSerial.end()) return it1->second;
-
+        for (const auto& key : keysToTry) {
+            auto it1 = m_ps1TitleToSerial.find(key);
+            if (it1 != m_ps1TitleToSerial.end()) return it1->second;
+            auto it2 = m_ps2TitleToSerial.find(key);
+            if (it2 != m_ps2TitleToSerial.end()) return it2->second;
+        }
         return "";
     }
 

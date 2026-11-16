@@ -61,14 +61,19 @@ DiscManager::DiscManager(QObject* parent)
 QString DiscManager::findDumpsDir() const
 {
     QString appDumps = QCoreApplication::applicationDirPath() + "/dumps";
-    if (QDir(appDumps).exists())
+    QString rootDumps = QFileInfo("./dumps").absoluteFilePath();
+
+    if (QDir(appDumps).exists() && !QDir(appDumps).isEmpty())
     {
         return appDumps;
     }
+    if (QDir(rootDumps).exists() && !QDir(rootDumps).isEmpty())
+    {
+        return rootDumps;
+    }
 
-    QString rootDumps = QFileInfo("./dumps").absoluteFilePath();
-    QDir().mkpath(rootDumps);
-    return rootDumps;
+    QDir().mkpath(appDumps);
+    return appDumps;
 }
 
 
@@ -142,75 +147,91 @@ bool DiscManager::launchLibraryFile(const QString& emulatorPath, const QString& 
 
 void DiscManager::refreshLibrary()
 {
-    QString dumpsPath = findDumpsDir();
+    QStringList dumpDirs = {
+        QCoreApplication::applicationDirPath() + "/dumps",
+        QFileInfo("./dumps").absoluteFilePath(),
+        QFileInfo("../dumps").absoluteFilePath()
+    };
+    dumpDirs.removeDuplicates();
 
     QStringList currentPaths;
     QVariantList newLibrary;
-
-    QDirIterator it(
-        dumpsPath,
-        QStringList() << "*.cue" << "*.iso",
-        QDir::Files,
-        QDirIterator::Subdirectories
-    );
+    QSet<QString> seenFiles;
 
     static QRegularExpression serialRegex(R"(([A-Za-z]{4}[-_]\d{5}))");
 
-    while (it.hasNext())
+    for (const QString& dumpsPath : dumpDirs)
     {
-        QString filePath = it.next();
-        QFileInfo fileInfo(filePath);
+        if (!QDir(dumpsPath).exists())
+            continue;
 
-        QString ext = fileInfo.suffix().toLower();
-        int cType = (ext == "iso") ? 2 : 1;
-        QString cName = (cType == 2) ? "PlayStation 2" : "PlayStation";
+        QDirIterator it(
+            dumpsPath,
+            QStringList() << "*.cue" << "*.iso",
+            QDir::Files,
+            QDirIterator::Subdirectories
+        );
 
-        QString baseName = fileInfo.completeBaseName();
-
-        QString serial;
-        QRegularExpressionMatch match = serialRegex.match(filePath);
-        if (match.hasMatch())
+        while (it.hasNext())
         {
-            serial = match.captured(1).toUpper().replace('_', '-');
-        }
-        else
-        {
-            serial = QString::fromStdString(
-                m_gameDb.getSerialByTitle(baseName.toStdString(), cType)
-            );
-        }
+            QString filePath = it.next();
+            QFileInfo fileInfo(filePath);
+            QString canonical = fileInfo.canonicalFilePath();
 
-        if (serial.size() >= 7)
-        {
-            int numPart = serial.mid(5).toInt();
-            if (numPart > 0 && numPart < 20000 && !serial.startsWith("SCPS-15") && !serial.startsWith("SLPM-6"))
+            if (seenFiles.contains(canonical))
+                continue;
+            seenFiles.insert(canonical);
+
+            QString ext = fileInfo.suffix().toLower();
+            int cType = (ext == "cue") ? 1 : 2;
+            QString cName = (cType == 1) ? "PlayStation" : "PlayStation 2";
+
+            QString baseName = fileInfo.completeBaseName();
+            QString parentFolderName = fileInfo.dir().dirName();
+
+            // 1. Check if filename or folder path contains a serial ID
+            QString serial;
+            QRegularExpressionMatch match = serialRegex.match(filePath);
+            if (match.hasMatch())
             {
-                cType = 1;
-                cName = "PlayStation";
+                serial = match.captured(1).toUpper().replace('_', '-');
             }
-        }
-
-        QString displayTitle = baseName;
-        if (!serial.isEmpty())
-        {
-            std::string lookedUp = m_gameDb.getGameTitle(serial.toStdString());
-            if (!lookedUp.empty() && lookedUp != serial.toStdString())
+            else
             {
-                displayTitle = QString::fromStdString(lookedUp);
+                // 2. Try reverse title lookup using the filename, then parent folder name
+                serial = QString::fromStdString(
+                    m_gameDb.getSerialByTitle(baseName.toStdString(), cType)
+                );
+                if (serial.isEmpty() && parentFolderName.compare("dumps", Qt::CaseInsensitive) != 0)
+                {
+                    serial = QString::fromStdString(
+                        m_gameDb.getSerialByTitle(parentFolderName.toStdString(), cType)
+                    );
+                }
             }
+
+            QString displayTitle = baseName;
+            if (!serial.isEmpty())
+            {
+                std::string lookedUp = m_gameDb.getGameTitle(serial.toStdString());
+                if (!lookedUp.empty() && lookedUp != serial.toStdString())
+                {
+                    displayTitle = QString::fromStdString(lookedUp);
+                }
+            }
+
+            QVariantMap entry;
+            entry["title"]       = displayTitle;
+            entry["filePath"]    = QDir::toNativeSeparators(fileInfo.absoluteFilePath());
+            entry["folderPath"]  = QDir::toNativeSeparators(fileInfo.absolutePath());
+            entry["consoleType"] = cType;
+            entry["consoleName"] = cName;
+            entry["serial"]      = serial;
+            entry["coverUrl"]    = resolve3DCoverUrl(serial, cType);
+
+            newLibrary.append(entry);
+            currentPaths.append(canonical);
         }
-
-        QVariantMap entry;
-        entry["title"]       = displayTitle;
-        entry["filePath"]    = QDir::toNativeSeparators(fileInfo.absoluteFilePath());
-        entry["folderPath"]  = QDir::toNativeSeparators(fileInfo.absolutePath());
-        entry["consoleType"] = cType;
-        entry["consoleName"] = cName;
-        entry["serial"]      = serial;
-        entry["coverUrl"]    = resolve3DCoverUrl(serial, cType);
-
-        newLibrary.append(entry);
-        currentPaths.append(filePath);
     }
 
     currentPaths.sort();
