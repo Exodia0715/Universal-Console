@@ -17,10 +17,13 @@ ApplicationWindow {
     color: "#06152c"
 
     onActiveChanged: {
-        // When the emulator closes and Universal Console
-        // becomes active again, restore the normal disc screen.
-        if (active && discLaunching) {
-            discLaunching = false
+        // When the emulator or Disc Dumper closes and Universal Console
+        // becomes active again, restore state and refresh the game library.
+        if (active) {
+            if (discLaunching) {
+                discLaunching = false
+            }
+            discManager.refreshLibrary()
         }
     }
 
@@ -31,8 +34,14 @@ ApplicationWindow {
     }
 
     // 0 = Disc
-    // 1 = Settings
+    // 1 = Library
+    // 2 = Settings
     property int currentCategory: 0
+
+    // Library submenu
+    // 0 = "+ Launch Disc Dumper"
+    // 1..N = Installed games in ./dumps
+    property int libraryIndex: 0
 
     // Settings submenu
     // 0 = History
@@ -81,7 +90,7 @@ ApplicationWindow {
             window.emulatorSettingsOpen)
             return
 
-        if (window.currentCategory < 1)
+        if (window.currentCategory < 2)
             window.currentCategory++
     }
 
@@ -97,6 +106,12 @@ ApplicationWindow {
         }
 
         if (window.currentCategory === 1 &&
+            window.libraryIndex > 0) {
+            window.libraryIndex--
+            return
+        }
+
+        if (window.currentCategory === 2 &&
             window.settingsIndex > 0) {
 
             window.settingsIndex--
@@ -114,10 +129,44 @@ ApplicationWindow {
             return
         }
 
-        if (window.currentCategory === 1 &&
+        if (window.currentCategory === 1) {
+            var maxLibIndex = discManager.libraryGames.length
+            if (window.libraryIndex < maxLibIndex)
+                window.libraryIndex++
+            return
+        }
+
+        if (window.currentCategory === 2 &&
             window.settingsIndex < 2) {
 
             window.settingsIndex++
+        }
+    }
+
+function launchLibraryGame(gameIndex) {
+        if (gameIndex < 0 || gameIndex >= discManager.libraryGames.length)
+            return
+
+        var game = discManager.libraryGames[gameIndex]
+        var emuPath = (game.consoleType === 2)
+                      ? appController.ps2EmulatorPath
+                      : appController.ps1EmulatorPath
+
+        window.discLaunching = true
+
+        // Launch the dumped .iso / .cue file directly on disk (ignores optical drive!)
+        var launched = discManager.launchLibraryFile(
+            emuPath,
+            game.filePath
+        )
+
+        if (!launched) {
+            console.log("Unable to launch library game:", game.filePath)
+            window.discLaunching = false
+            window.openPlaceholder(
+                "Emulator Not Configured",
+                "Please select your " + game.consoleName + " emulator executable under Settings -> Emulator Settings."
+            )
         }
     }
 
@@ -135,6 +184,7 @@ ApplicationWindow {
         if (window.popupOpen)
             return
 
+        // Category 0: Physical Disc
         if (window.currentCategory === 0) {
 
             if (window.discLaunching)
@@ -160,6 +210,23 @@ ApplicationWindow {
             return
         }
 
+        // Category 1: Game Library & Dumper
+        if (window.currentCategory === 1) {
+            if (window.libraryIndex === 0) {
+                var started = discManager.launchDumper()
+                if (!started) {
+                    window.openPlaceholder(
+                        "Disc Dumper Not Found",
+                        "Place UniversalConsoleDumper.exe in the build/ folder to launch the disc extraction utility."
+                    )
+                }
+            } else {
+                window.launchLibraryGame(window.libraryIndex - 1)
+            }
+            return
+        }
+
+        // Category 2: Settings
         switch (window.settingsIndex) {
 
         case 0:
@@ -459,9 +526,7 @@ ApplicationWindow {
 
         y: 145
 
-        spacing: 150
-
-        // Disc
+        spacing: 120
 
         Item {
             id: discCategory
@@ -549,12 +614,9 @@ ApplicationWindow {
             }
         }
 
-        // -----------------------------------------------------
-        // SETTINGS
-        // -----------------------------------------------------
 
         Item {
-            id: settingsCategory
+            id: libraryCategory
 
             width: 170
             height: 125
@@ -563,6 +625,103 @@ ApplicationWindow {
 
             opacity:
                 window.currentCategory === 1 ? 1.0 : 0.42
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                }
+            }
+
+            Column {
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                spacing: 9
+
+                Canvas {
+                    id: booksIcon
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    width: 58
+                    height: 58
+
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+
+                        ctx.strokeStyle = "white"
+                        ctx.lineWidth = 3
+                        ctx.lineJoin = "round"
+                        ctx.lineCap = "round"
+
+                        // Book 1 (Left standing spine)
+                        ctx.strokeRect(10, 12, 10, 36)
+                        ctx.beginPath()
+                        ctx.moveTo(10, 20)
+                        ctx.lineTo(20, 20)
+                        ctx.stroke()
+
+                        // Book 2 (Middle standing spine, slightly taller)
+                        ctx.strokeRect(22, 8, 11, 40)
+                        ctx.beginPath()
+                        ctx.moveTo(22, 17)
+                        ctx.lineTo(33, 17)
+                        ctx.stroke()
+
+                        // Book 3 (Right tilted book leaning against the others)
+                        ctx.save()
+                        ctx.translate(36, 48)
+                        ctx.rotate(-0.22)
+                        ctx.strokeRect(0, -36, 10, 36)
+                        ctx.beginPath()
+                        ctx.moveTo(0, -28)
+                        ctx.lineTo(10, -28)
+                        ctx.stroke()
+                        ctx.restore()
+                    }
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    text: "Library"
+
+                    color: "white"
+
+                    font.family: xmbFont.name
+                    font.pixelSize: 19
+                    font.weight: Font.Normal
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+
+                onClicked: {
+                    window.currentCategory = 1
+                    discManager.refreshLibrary()
+                    keyboardFocus.forceActiveFocus()
+                }
+            }
+        }
+
+        Item {
+            id: settingsCategory
+
+            width: 170
+            height: 125
+
+            scale: window.currentCategory === 2 ? 1.16 : 1.0
+
+            opacity:
+                window.currentCategory === 2 ? 1.0 : 0.42
 
             Behavior on scale {
                 NumberAnimation {
@@ -682,16 +841,12 @@ ApplicationWindow {
                 anchors.fill: parent
 
                 onClicked: {
-                    window.currentCategory = 1
+                    window.currentCategory = 2
                     keyboardFocus.forceActiveFocus()
                 }
             }
         }
     }
-
-// =========================================================
-    // DISC MENU
-    // =========================================================
 
     Item {
         id: discMenu
@@ -782,7 +937,6 @@ ApplicationWindow {
                     color: "#000000"
                     opacity: 0.35
 
-                    // Shadow shrinks and fades slightly as the box floats up
                     SequentialAnimation on scale {
                         running: coverImage.status === Image.Ready
                         loops: Animation.Infinite
@@ -814,7 +968,6 @@ ApplicationWindow {
                     smooth: true
                     mipmap: true
 
-                    // 3D Perspective Rotation Transform
                     transform: Rotation {
                         id: boxRotation
                         origin.x: coverImage.width / 2
@@ -823,7 +976,6 @@ ApplicationWindow {
                         angle: 0
                     }
 
-                    // 1. Entrance Animation when a new cover loads
                     onStatusChanged: {
                         if (status === Image.Ready) {
                             entranceAnim.restart()
@@ -857,7 +1009,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // 2. Continuous Levitation (Bobbing up and down)
                     SequentialAnimation on y {
                         running: coverImage.status === Image.Ready
                         loops: Animation.Infinite
@@ -865,7 +1016,6 @@ ApplicationWindow {
                         NumberAnimation { to: 0;   duration: 2200; easing.type: Easing.InOutSine }
                     }
 
-                    // 3. Continuous 3D Perspective Rocking (Y/X axis tilt)
                     SequentialAnimation {
                         running: coverImage.status === Image.Ready && !entranceAnim.running
                         loops: Animation.Infinite
@@ -886,7 +1036,6 @@ ApplicationWindow {
                     }
                 }
 
-                // Fallback text while loading or if cover is missing
                 Text {
                     anchors.centerIn: parent
                     visible: coverImage.status !== Image.Ready
@@ -912,9 +1061,266 @@ ApplicationWindow {
         }
     }
 
-    // =========================================================
-    // SETTINGS MENU
-    // =========================================================
+
+    Item {
+        id: libraryMenu
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 290
+        width: 780
+        height: 310
+
+        visible: window.currentCategory === 1
+
+        Row {
+            anchors.fill: parent
+            spacing: 45
+
+            // Left Column: "+ Launch Disc Dumper" & Installed Games List
+            Column {
+                width: 440
+                spacing: 8
+
+                SettingsEntry {
+                    width: 440
+                    title: "+ Launch Disc Dumper"
+                    selected: window.libraryIndex === 0
+
+                    onClicked: {
+                        window.libraryIndex = 0
+                        window.selectAction()
+                        keyboardFocus.forceActiveFocus()
+                    }
+                }
+
+                Rectangle {
+                    width: 380
+                    height: 1
+                    color: "#3d5573"
+                    opacity: 0.5
+                }
+
+                // Empty state message if no games are in ./dumps yet
+                Text {
+                    visible: discManager.libraryGames.length === 0
+                    text: "No extracted games found in ./dumps yet.\nClick '+ Launch Disc Dumper' above to extract a disc."
+                    color: "#93a2b4"
+                    font.family: xmbFont.name
+                    font.pixelSize: 14
+                    topPadding: 10
+                }
+
+// Scrollable list of installed games
+                ListView {
+                    id: libraryListView
+
+                    width: 440
+                    height: 230
+                    clip: true
+                    spacing: 6
+
+                    model: discManager.libraryGames
+                    currentIndex: window.libraryIndex - 1
+
+                    delegate: SettingsEntry {
+                        required property int index
+                        required property var modelData
+
+                        width: 420
+                        title: modelData.title
+                        selected: window.libraryIndex === (index + 1)
+
+                        onClicked: {
+                            if (window.libraryIndex === (index + 1)) {
+                                window.selectAction()
+                            } else {
+                                window.libraryIndex = index + 1
+                            }
+                            keyboardFocus.forceActiveFocus()
+                        }
+                    }
+                }
+            }
+
+// Right Column: 3D Floating Box Art & Console Preview for Selected Game
+            Column {
+                width: 260
+                spacing: 8
+                anchors.top: parent.top
+
+                visible: window.libraryIndex > 0 &&
+                         (window.libraryIndex - 1) < discManager.libraryGames.length
+
+                property var activeGame:
+                    (window.libraryIndex > 0 && (window.libraryIndex - 1) < discManager.libraryGames.length)
+                    ? discManager.libraryGames[window.libraryIndex - 1]
+                    : null
+
+                // 3D Floating Box Art Container
+                Item {
+                    id: libCoverContainer
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 240
+                    height: 255
+
+                    // Reactive floor shadow underneath the floating 3D case
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 4
+
+                        width: 140
+                        height: 18
+                        radius: 9
+                        color: "#000000"
+                        opacity: 0.35
+
+                        SequentialAnimation on scale {
+                            running: libCoverImage.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.82; duration: 2200; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 1.0;  duration: 2200; easing.type: Easing.InOutSine }
+                        }
+
+                        SequentialAnimation on opacity {
+                            running: libCoverImage.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.18; duration: 2200; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 0.40; duration: 2200; easing.type: Easing.InOutSine }
+                        }
+                    }
+
+                    // The 3D Case Image
+                    Image {
+                        id: libCoverImage
+
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 0
+
+                        width: 205
+                        height: 230
+
+                        source: parent.parent.activeGame ? parent.parent.activeGame.coverUrl : ""
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        smooth: true
+                        mipmap: true
+
+                        transform: Rotation {
+                            id: libBoxRotation
+                            origin.x: libCoverImage.width / 2
+                            origin.y: libCoverImage.height / 2
+                            axis { x: 0.15; y: 1.0; z: 0.0 }
+                            angle: 0
+                        }
+
+                        // Re-trigger the 3D flip-in animation whenever you scroll to a different game!
+                        onSourceChanged: {
+                            if (status === Image.Ready) {
+                                libEntranceAnim.restart()
+                            }
+                        }
+
+                        onStatusChanged: {
+                            if (status === Image.Ready) {
+                                libEntranceAnim.restart()
+                            }
+                        }
+
+                        ParallelAnimation {
+                            id: libEntranceAnim
+                            NumberAnimation {
+                                target: libCoverImage
+                                property: "scale"
+                                from: 0.6
+                                to: 1.0
+                                duration: 500
+                                easing.type: Easing.OutBack
+                            }
+                            NumberAnimation {
+                                target: libCoverImage
+                                property: "opacity"
+                                from: 0.0
+                                to: 1.0
+                                duration: 300
+                            }
+                            NumberAnimation {
+                                target: libBoxRotation
+                                property: "angle"
+                                from: -65
+                                to: 0
+                                duration: 550
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        // Continuous Levitation (Bobbing up and down)
+                        SequentialAnimation on y {
+                            running: libCoverImage.status === Image.Ready
+                            loops: Animation.Infinite
+                            NumberAnimation { to: -12; duration: 2200; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: 0;   duration: 2200; easing.type: Easing.InOutSine }
+                        }
+
+                        // Continuous 3D Perspective Rocking
+                        SequentialAnimation {
+                            running: libCoverImage.status === Image.Ready && !libEntranceAnim.running
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                target: libBoxRotation
+                                property: "angle"
+                                to: 12
+                                duration: 2800
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                target: libBoxRotation
+                                property: "angle"
+                                to: -12
+                                duration: 2800
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        width: parent.width - 20
+                        visible: libCoverImage.status !== Image.Ready
+                        text: libCoverImage.status === Image.Loading
+                              ? "Loading 3D Box..."
+                              : (parent.parent.activeGame ? parent.parent.activeGame.title : "")
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        color: "#93a2b4"
+                        font.family: xmbFont.name
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            window.selectAction()
+                            keyboardFocus.forceActiveFocus()
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: parent.activeGame ? parent.activeGame.consoleName + "  •  Installed Dump" : ""
+                    horizontalAlignment: Text.AlignHCenter
+                    color: "#c3cedc"
+                    font.family: xmbFont.name
+                    font.pixelSize: 14
+                    opacity: 0.85
+                }
+            }
+        }
+    }
+
 
     Column {
         id: settingsMenu
@@ -927,7 +1333,7 @@ ApplicationWindow {
 
         width: 330
 
-        visible: window.currentCategory === 1
+        visible: window.currentCategory === 2
 
         spacing: 8
 
@@ -1124,6 +1530,14 @@ ApplicationWindow {
                 return discManager.discReady
                        ? "Press Select to launch " + discManager.gameTitle + "."
                        : "Ready for a PlayStation game disc."
+
+            if (window.currentCategory === 1) {
+                if (window.libraryIndex === 0)
+                    return "Open the Disc Dumper utility to extract games to your local library."
+                if ((window.libraryIndex - 1) < discManager.libraryGames.length)
+                    return "Press Select to play " + discManager.libraryGames[window.libraryIndex - 1].title + "."
+                return "Browse and launch your extracted PlayStation games."
+            }
 
             switch (window.settingsIndex) {
 
@@ -1497,6 +1911,8 @@ ApplicationWindow {
             }
 
             Text {
+                width: entry.width - 35
+                elide: Text.ElideRight
                 text: entry.title
 
                 color: "white"

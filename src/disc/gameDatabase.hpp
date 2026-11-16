@@ -9,8 +9,8 @@
 class GameDatabase {
 public:
     void loadFromDirectory(const std::string& resourceDir) {
-        loadYamlDatabase(resourceDir + "/GameIndex.yaml"); // PCSX2 (PS2)
-        loadYamlDatabase(resourceDir + "/gamedb.yaml");    // DuckStation (PS1)
+        loadYamlDatabase(resourceDir + "/GameIndex.yaml", 2); // PCSX2 (PS2)
+        loadYamlDatabase(resourceDir + "/gamedb.yaml", 1);    // DuckStation (PS1)
     }
 
     // Returns the human-readable game title, or the serial ID if not found
@@ -21,6 +21,28 @@ public:
             return it->second;
         }
         return cleanSerial; // Fallback if unknown disc
+    }
+
+    // Reverse lookup: finds a Serial ID from a folder/file name matching the console type (1 = PS1, 2 = PS2)
+    std::string getSerialByTitle(const std::string& folderOrTitle, int consoleType = 0) const {
+        std::string key = toLower(sanitizeForFilename(folderOrTitle));
+
+        if (consoleType == 2) {
+            auto it = m_ps2TitleToSerial.find(key);
+            if (it != m_ps2TitleToSerial.end()) return it->second;
+        } else if (consoleType == 1) {
+            auto it = m_ps1TitleToSerial.find(key);
+            if (it != m_ps1TitleToSerial.end()) return it->second;
+        }
+
+        // Fallback: check both maps
+        auto it2 = m_ps2TitleToSerial.find(key);
+        if (it2 != m_ps2TitleToSerial.end()) return it2->second;
+
+        auto it1 = m_ps1TitleToSerial.find(key);
+        if (it1 != m_ps1TitleToSerial.end()) return it1->second;
+
+        return "";
     }
 
     // Strips illegal Windows filename characters (: * ? " < > | / \) for folder naming
@@ -38,13 +60,23 @@ public:
 
 private:
     std::unordered_map<std::string, std::string> m_titles;
+    std::unordered_map<std::string, std::string> m_ps1TitleToSerial;
+    std::unordered_map<std::string, std::string> m_ps2TitleToSerial;
 
-    void loadYamlDatabase(const std::string& filePath) {
+    static std::string toLower(std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return s;
+    }
+
+    void loadYamlDatabase(const std::string& filePath, int consoleType) {
         if (!std::filesystem::exists(filePath)) return;
 
         std::ifstream file(filePath);
         std::string line;
         std::string currentSerial;
+
+        auto& targetMap = (consoleType == 2) ? m_ps2TitleToSerial : m_ps1TitleToSerial;
 
         while (std::getline(file, line)) {
             if (line.empty() || line[0] == '#') continue;
@@ -54,7 +86,6 @@ private:
                 size_t colonPos = line.find(':');
                 if (colonPos != std::string::npos) {
                     currentSerial = line.substr(0, colonPos);
-                    // Trim quotes or whitespace if present
                     currentSerial.erase(std::remove(currentSerial.begin(), currentSerial.end(), '\"'), currentSerial.end());
                     currentSerial.erase(currentSerial.find_last_not_of(" \r\n\t") + 1);
                     std::transform(currentSerial.begin(), currentSerial.end(), currentSerial.begin(), ::toupper);
@@ -65,19 +96,24 @@ private:
                 size_t firstChar = line.find_first_not_of(" \t");
                 if (firstChar == std::string::npos) continue;
 
-                // Only match direct child properties (2 spaces indentation)
                 if (firstChar <= 4 && (line.compare(firstChar, 5, "name:") == 0 || 
                                        line.compare(firstChar, 6, "title:") == 0)) {
                     size_t colonPos = line.find(':', firstChar);
                     std::string title = line.substr(colonPos + 1);
 
-                    // Trim leading/trailing spaces and quotes
                     size_t start = title.find_first_not_of(" \t\"");
                     size_t end = title.find_last_not_of(" \r\n\t\"");
                     if (start != std::string::npos && end != std::string::npos && end >= start) {
-                        m_titles[currentSerial] = title.substr(start, end - start + 1);
+                        std::string cleanTitle = title.substr(start, end - start + 1);
+                        m_titles[currentSerial] = cleanTitle;
+
+                        std::string sanitizedKey = toLower(sanitizeForFilename(cleanTitle));
+                        bool isUsRelease = (currentSerial.size() >= 3 && currentSerial[2] == 'U');
+                        if (targetMap.find(sanitizedKey) == targetMap.end() || isUsRelease) {
+                            targetMap[sanitizedKey] = currentSerial;
+                        }
                     }
-                    currentSerial.clear(); // Move on to next serial
+                    currentSerial.clear();
                 }
             }
         }
